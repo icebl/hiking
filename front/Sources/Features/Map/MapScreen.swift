@@ -6,15 +6,15 @@ import SwiftUI
 ///   右列：图层 / 叠加 / 工具 / 缩放(+/-) / 缩放滑块 / 公里标
 struct MapScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var mapCtrl = MapController()
     @State private var showRecording = false
     @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）
-    @State private var zoomLevel: Double = 0.5  // 缩放滑块占位（任务 2.3 接真实缩放）
+    @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1）
 
     var body: some View {
         ZStack {
-            MapLibreView()
+            MapLibreView(controller: mapCtrl)
                 .ignoresSafeArea()
-                .onTapGesture { /* TODO(2.8): 命中地图取坐标，按设置格式显示 */ tapped = "41.70123°N, 123.45130°E" }
 
             // 信息条：靠上居中（WGS84 浅绿高亮）
             VStack {
@@ -29,8 +29,8 @@ struct MapScreen: View {
                     ctrl("chevron.left") { dismiss() }
                     Spacer()
                     VStack(spacing: 14) {
-                        ctrl("location.fill", "定位", filled: true)   // TODO(2.4): 回到我的位置
-                        ctrl("scope", "居中")                          // TODO(2.3): 地图居中
+                        ctrl("location.fill", "定位", filled: true) { mapCtrl.recenterOnUser() }
+                        ctrl("scope", "居中") { mapCtrl.center() }
                     }
                     Spacer()
                 }
@@ -48,8 +48,8 @@ struct MapScreen: View {
                     ctrl("square.on.square", "叠加")          // TODO: 多轨迹叠加面板
                     ctrl("wrench.and.screwdriver", "工具")    // 工具箱（P1）
                     Spacer()
-                    zoomGroup                                  // TODO(2.3): 接真实缩放
-                    zoomSlider
+                    zoomGroup                                  // 缩放 +/-（已接 mapCtrl）
+                    zoomSlider                                 // 滑块缩放（已接 mapCtrl）
                     Spacer()
                     ctrl("ruler", "公里标")                    // TODO(2.3): 每 1KM 里程标
                 }
@@ -105,12 +105,12 @@ struct MapScreen: View {
     /// 缩放 +/- 竖排药丸
     private var zoomGroup: some View {
         VStack(spacing: 0) {
-            Button { /* TODO(2.3) zoom in */ } label: {
+            Button { mapCtrl.zoomIn() } label: {
                 Image(systemName: "plus").font(.system(size: 18, weight: .semibold))
                     .foregroundColor(AppColor.ink).frame(width: 44, height: 44)
             }
             Rectangle().fill(AppColor.divider).frame(width: 44, height: 1)
-            Button { /* TODO(2.3) zoom out */ } label: {
+            Button { mapCtrl.zoomOut() } label: {
                 Image(systemName: "minus").font(.system(size: 18, weight: .semibold))
                     .foregroundColor(AppColor.ink).frame(width: 44, height: 44)
             }
@@ -134,6 +134,7 @@ struct MapScreen: View {
             DragGesture().onChanged { v in
                 let frac = 1 - Double(v.location.y) / 110
                 zoomLevel = min(1, max(0, frac))
+                mapCtrl.setZoom(fraction: zoomLevel)
             }
         )
     }
