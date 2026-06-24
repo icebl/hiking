@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>徒步APP 可交互原型</title>
+<style>
+  :root{
+    --primary:#1F9D55;--primary-dark:#15803D;--primary-tint:#E6F6EC;
+    --rec:#FF3B30;--warn:#F2730D;--info:#2D7FF9;--contour:#36C5C0;
+    --ink:#1C1C1E;--ink2:#6B7280;--card:#FFF;--divider:#E5E7EB;--scrim:rgba(18,20,24,.72);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{font-family:-apple-system,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+    background:#0e1116;color:#e8eaed;min-height:100vh;display:flex;gap:40px;
+    justify-content:center;align-items:flex-start;padding:36px 24px;flex-wrap:wrap;}
+
+  .phone{width:374px;height:794px;background:#000;border-radius:48px;padding:11px;
+    box-shadow:0 24px 70px rgba(0,0,0,.55);position:relative;flex:none;}
+  .screen-host{width:100%;height:100%;border-radius:38px;overflow:hidden;position:relative;background:#0c0f0d;}
+  .island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:110px;height:30px;
+    background:#000;border-radius:18px;z-index:200;}
+  .statusbar{position:absolute;top:0;left:0;right:0;height:50px;z-index:150;display:flex;
+    justify-content:space-between;align-items:center;padding:15px 28px 0;font-size:14px;font-weight:600;color:#fff;}
+  .statusbar.dark{color:#1C1C1E;}
+  .statusbar .r{font-size:12px;}
+
+  /* screens */
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;background:#F2F3F5;}
+  .screen.active{display:flex;}
+  .scrollable{flex:1;overflow:auto;}
+
+  /* nav bar */
+  .nav{height:96px;padding:50px 14px 10px;display:flex;align-items:center;gap:8px;background:#fff;
+    border-bottom:1px solid var(--divider);position:relative;z-index:60;flex:none;}
+  .nav .title{font-size:17px;font-weight:600;color:var(--ink);}
+  .nav .back{width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .nav .back svg{width:22px;height:22px;stroke:var(--primary);stroke-width:2.4;fill:none;}
+  .nav .right{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  .seg{display:flex;background:#EDEEF0;border-radius:9px;padding:3px;margin-left:6px;}
+  .seg span{font-size:14px;padding:5px 13px;border-radius:7px;color:var(--ink2);cursor:pointer;}
+  .seg span.on{background:var(--primary);color:#fff;font-weight:600;}
+  .iconbtn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .iconbtn svg{width:21px;height:21px;stroke:var(--ink);stroke-width:1.9;fill:none;}
+
+  /* faux map */
+  .mapwrap{position:relative;flex:1;overflow:hidden;background:
+    radial-gradient(120% 90% at 30% 20%,#3c5a3a,#2f4a30 38%,#27412a 62%,#1f3724);}
+  .mapwrap svg.bg{position:absolute;inset:0;width:100%;height:100%;}
+
+  .ctrl{position:absolute;width:44px;height:44px;border-radius:50%;background:#fff;display:flex;
+    align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:30;cursor:pointer;}
+  .ctrl svg{width:22px;height:22px;stroke:#1C1C1E;fill:none;stroke-width:1.8;}
+  .ctrl.fill svg{fill:#1C1C1E;stroke:none;}
+  .ctrl small{position:absolute;bottom:-14px;font-size:9px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.7);white-space:nowrap;}
+  .zoom{position:absolute;width:44px;background:#fff;border-radius:22px;box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:30;}
+  .zoom div{height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .zoom div:first-child{border-bottom:1px solid var(--divider);}
+  .zoom svg{width:20px;height:20px;stroke:#1C1C1E;stroke-width:2.2;}
+  .slider{position:absolute;width:4px;height:110px;background:rgba(255,255,255,.6);border-radius:2px;z-index:30;}
+  .slider::after{content:"";position:absolute;left:50%;top:36px;transform:translateX(-50%);width:24px;height:24px;
+    border-radius:50%;background:var(--primary);box-shadow:0 2px 6px rgba(0,0,0,.3);}
+
+  .infobar{position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:35;background:var(--scrim);color:#fff;
+    border-radius:12px;padding:6px 14px;font-size:11.5px;font-weight:500;line-height:1.5;backdrop-filter:blur(6px);
+    text-align:center;white-space:nowrap;}
+  .infobar .tag{color:#7ee0a6;font-weight:700;}
+
+  /* heading marker (随方向旋转的箭头) */
+  .me .heading{position:absolute;left:-9px;top:-9px;width:18px;height:18px;animation:sway 4.5s ease-in-out infinite;transform-origin:center;}
+  @keyframes sway{0%,100%{transform:rotate(-20deg);}50%{transform:rotate(20deg);}}
+  .me .cone{position:absolute;left:50%;top:-15px;transform:translateX(-50%);width:0;height:0;
+    border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:15px solid var(--info);
+    filter:drop-shadow(0 0 1px #fff);}
+  .me .heading .dot{position:absolute;left:0;top:0;}
+
+  /* 距离雷达叠加 */
+  .radar{position:absolute;left:44%;top:46%;z-index:20;pointer-events:none;display:none;}
+  .radar.on{display:block;}
+  .radar i{position:absolute;border:1px solid rgba(255,90,80,.6);border-radius:50%;transform:translate(-50%,-50%);}
+  .radar b{position:absolute;color:#ff7a70;font-size:9px;font-weight:700;transform:translate(-50%,-50%);text-shadow:0 1px 2px #000;}
+  .radar .bear{position:absolute;left:0;top:0;width:1px;height:120px;background:rgba(255,90,80,.7);transform-origin:top;transform:rotate(23deg);}
+
+  /* 点击地图取经纬度 readout */
+  .tapreadout{position:absolute;left:0;right:0;bottom:96px;z-index:34;background:var(--scrim);color:#fff;padding:9px 16px;
+    font-size:12.5px;display:none;justify-content:space-between;align-items:center;}
+  .tapreadout.on{display:flex;}
+  .tapreadout .c{color:#7ee0a6;font-weight:700;}
+  .crosspin{position:absolute;z-index:26;width:22px;height:22px;margin:-11px 0 0 -11px;display:none;}
+  .crosspin.on{display:block;}
+  .crosspin::before,.crosspin::after{content:"";position:absolute;background:#fff;box-shadow:0 0 2px #000;}
+  .crosspin::before{left:10px;top:0;width:2px;height:22px;}
+  .crosspin::after{top:10px;left:0;height:2px;width:22px;}
+
+  /* 工具箱抽屉 (left drawer) */
+  .drawer-scrim{position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:320;opacity:0;pointer-events:none;transition:.2s;}
+  .drawer-scrim.open{opacity:1;pointer-events:auto;}
+  .drawer{position:absolute;left:0;top:0;bottom:0;width:78%;z-index:330;background:#fff;transform:translateX(-105%);
+    transition:.28s cubic-bezier(.2,.8,.2,1);overflow:auto;padding:50px 0 20px;}
+  .drawer.open{transform:translateX(0);}
+  .drawer .dt{font-size:18px;font-weight:700;color:var(--ink);padding:8px 20px 14px;}
+  .toolrow{display:flex;gap:13px;padding:13px 20px;align-items:flex-start;cursor:pointer;}
+  .toolrow .ic{width:36px;height:36px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;}
+  .toolrow .nm b{font-size:15px;color:var(--ink);}
+  .toolrow .nm span{display:block;font-size:11.5px;color:var(--ink2);margin-top:2px;}
+
+  /* 测距顶部条 */
+  .measbar{position:absolute;top:50px;left:0;right:0;z-index:40;background:var(--primary);color:#fff;height:46px;
+    display:flex;align-items:center;padding:0 14px;gap:14px;}
+  .measbar .total{background:rgba(255,255,255,.9);color:var(--ink);border-radius:8px;padding:5px 12px;font-size:14px;font-weight:700;}
+  .measbar .sp{flex:1;}
+  .measbar .ic{cursor:pointer;}.measbar .ic svg{width:22px;height:22px;stroke:#fff;fill:none;stroke-width:2;}
+
+  .me{position:absolute;z-index:25;}
+  .me .acc{position:absolute;width:84px;height:84px;border-radius:50%;background:rgba(45,127,249,.18);
+    border:1px solid rgba(45,127,249,.5);left:-42px;top:-42px;}
+  .me .dot{width:18px;height:18px;border-radius:50%;background:var(--info);border:3px solid #fff;
+    box-shadow:0 0 4px rgba(0,0,0,.4);position:relative;z-index:2;}
+  .pin{position:absolute;z-index:24;width:25px;height:25px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:11px;font-weight:700;color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);}
+
+  .ctabar{position:absolute;left:0;right:0;bottom:0;z-index:35;padding:14px 16px 26px;display:flex;gap:12px;
+    background:linear-gradient(to top,rgba(20,30,22,.92),rgba(20,30,22,0));}
+  .btn{height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:8px;
+    font-size:17px;font-weight:600;cursor:pointer;flex:1;}
+  .btn svg{width:20px;height:20px;}
+  .btn.primary{background:var(--primary);color:#fff;}.btn.primary svg{fill:#fff;}
+  .btn.light{background:rgba(255,255,255,.96);color:#1C1C1E;}.btn.light svg{fill:var(--primary);}
+  .btn.rec{background:var(--rec);color:#fff;}.btn.rec svg{fill:#fff;}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--divider);}.btn.ghost svg{fill:var(--ink);}
+
+  /* recording */
+  .recbar{position:absolute;top:54px;left:50%;transform:translateX(-50%);z-index:35;background:var(--scrim);
+    color:#fff;border-radius:18px;padding:7px 14px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;}
+  .recdot{width:9px;height:9px;border-radius:50%;background:var(--rec);animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,48,.6);}70%{box-shadow:0 0 0 8px rgba(255,59,48,0);}100%{box-shadow:0 0 0 0 rgba(255,59,48,0);}}
+  .recbar .gps{color:#7ee0a6;font-weight:700;}
+  .panel{background:#fff;border-radius:22px 22px 0 0;padding:18px 18px 26px;box-shadow:0 -4px 20px rgba(0,0,0,.15);flex:none;}
+  .bignum{display:flex;align-items:baseline;gap:6px;}
+  .bignum .v{font-size:38px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .bignum .u{font-size:15px;color:var(--ink2);font-weight:600;}
+  .lbl{font-size:12px;color:var(--ink2);font-weight:500;margin-top:2px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px 8px;margin:14px 0 18px;}
+  .grid3 .v{font-size:21px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .grid3 .up{color:var(--primary);}.grid3 .dn{color:var(--ink2);}
+
+  /* tab bar */
+  .tabbar{height:80px;background:rgba(255,255,255,.96);border-top:1px solid var(--divider);display:flex;
+    padding-bottom:18px;flex:none;backdrop-filter:blur(10px);}
+  .tabbar .t{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--ink2);}
+  .tabbar .t.on{color:var(--primary);}
+  .tabbar .t svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;}
+  .tabbar .t.on svg{fill:currentColor;stroke:none;}
+  .tabbar .t span{font-size:10px;font-weight:500;}
+
+  /* generic content */
+  .body{padding:16px;}
+  .sectit{font-size:12px;color:var(--ink2);font-weight:600;margin:18px 4px 8px;letter-spacing:.5px;}
+  .card{background:#fff;border-radius:16px;padding:16px;margin-bottom:12px;}
+  .statcard{display:flex;justify-content:space-around;text-align:center;}
+  .statcard .v{font-size:24px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .statcard .l{font-size:11px;color:var(--ink2);margin-top:2px;}
+  .quick{display:flex;gap:12px;}
+  .quick .q{flex:1;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;gap:8px;
+    font-size:15px;font-weight:600;cursor:pointer;}
+  .quick .q svg{width:22px;height:22px;}
+  .q.green{background:var(--primary);color:#fff;}.q.green svg{fill:#fff;}
+  .q.tint{background:var(--primary-tint);color:var(--primary-dark);}.q.tint svg{fill:var(--primary-dark);}
+  .banner{height:96px;border-radius:16px;background:linear-gradient(120deg,#1F9D55,#36C5C0);color:#fff;
+    padding:16px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;margin-bottom:10px;}
+  .banner b{font-size:16px;}.banner span{font-size:12px;opacity:.9;margin-top:4px;}
+  .notice{background:#fff;border-radius:12px;padding:12px 14px;font-size:13px;color:var(--ink);margin-bottom:8px;display:flex;gap:8px;}
+  .notice .dot{color:var(--warn);font-weight:700;}
+
+  /* list rows (tracks) */
+  .row{background:#fff;border-radius:14px;padding:10px;margin-bottom:10px;display:flex;gap:12px;cursor:pointer;}
+  .thumb{width:74px;height:74px;border-radius:10px;flex:none;background:
+    radial-gradient(100% 100% at 30% 20%,#3c5a3a,#27412a);position:relative;overflow:hidden;}
+  .thumb svg{position:absolute;inset:0;width:100%;height:100%;}
+  .row .info{flex:1;min-width:0;}
+  .row .nm{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:6px;}
+  .row .meta{font-size:12px;color:var(--ink2);line-height:1.7;}
+  .row .meta b{color:var(--ink);font-weight:600;}
+  .folder{background:#fff;border-radius:12px;padding:13px 14px;margin-bottom:8px;display:flex;
+    justify-content:space-between;font-size:14px;color:var(--ink);}
+  .folder .c{color:var(--ink2);font-size:12px;}
+  .searchbar{display:flex;gap:8px;margin-bottom:10px;}
+  .searchbar input{flex:1;height:38px;border-radius:10px;border:none;background:#fff;padding:0 12px;font-size:14px;}
+  .filterrow{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
+  .chip{background:#fff;border-radius:8px;padding:6px 10px;font-size:12px;color:var(--ink2);}
+  .chip.on{background:var(--primary-tint);color:var(--primary-dark);font-weight:600;}
+
+  /* settings / list items */
+  .li{background:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;
+    font-size:15px;color:var(--ink);border-bottom:1px solid var(--divider);cursor:pointer;}
+  .li:last-child{border-bottom:none;}
+  .li .val{color:var(--ink2);font-size:14px;}
+  .group{border-radius:14px;overflow:hidden;margin-bottom:14px;}
+  .toggle{width:44px;height:26px;border-radius:13px;background:var(--primary);position:relative;}
+  .toggle::after{content:"";position:absolute;width:22px;height:22px;border-radius:50%;background:#fff;top:2px;right:2px;}
+  .toggle.off{background:#ccc;}.toggle.off::after{left:2px;right:auto;}
+
+  /* detail stats */
+  .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .statbox{background:var(--primary-tint);border-radius:10px;padding:10px 12px;}
+  .statbox .l{font-size:11px;color:var(--primary-dark);}
+  .statbox .v{font-size:18px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;}
+
+  /* bottom action bar */
+  .actionbar{padding:12px 16px 26px;display:flex;gap:12px;background:#fff;border-top:1px solid var(--divider);flex:none;}
+
+  /* sheets */
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:300;opacity:0;pointer-events:none;transition:.2s;}
+  .scrim.open{opacity:1;pointer-events:auto;}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:310;background:#fff;border-radius:20px 20px 0 0;
+    padding:18px 16px 28px;transform:translateY(110%);transition:.28s cubic-bezier(.2,.8,.2,1);max-height:78%;overflow:auto;}
+  .sheet.open{transform:translateY(0);}
+  .sheet .sh-tit{text-align:center;font-size:15px;font-weight:600;color:var(--ink);margin-bottom:14px;}
+  .ovrow{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--divider);}
+  .ovrow .ic{width:38px;height:38px;border-radius:10px;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;}
+  .ovrow .ic svg{width:20px;height:20px;stroke:var(--primary-dark);fill:none;stroke-width:1.8;}
+  .ovrow .nm{flex:1;}.ovrow .nm b{font-size:14px;color:var(--ink);}.ovrow .nm span{display:block;font-size:11px;color:var(--ink2);}
+  .lyrow{display:flex;align-items:center;gap:10px;padding:13px 4px;border-bottom:1px solid var(--divider);font-size:15px;color:var(--ink);cursor:pointer;}
+  .lyrow .rb{width:20px;height:20px;border-radius:50%;border:2px solid #ccc;}
+  .lyrow.on .rb{border-color:var(--primary);background:var(--primary);box-shadow:inset 0 0 0 3px #fff;}
+  .lyrow .on-line{margin-left:auto;font-size:11px;color:var(--ink2);}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:18px 6px;padding:6px 0;}
+  .act{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;}
+  .act .c{width:48px;height:48px;border-radius:50%;border:1px solid var(--divider);display:flex;align-items:center;justify-content:center;}
+  .act .c svg{width:22px;height:22px;stroke:var(--ink);fill:none;stroke-width:1.7;}
+  .act.danger .c svg{stroke:var(--rec);}.act.danger{color:var(--rec);}
+  .sh-cancel{text-align:center;padding:14px;margin-top:8px;font-size:16px;color:var(--ink2);cursor:pointer;border-top:8px solid #f2f3f5;}
+
+  /* warning banner (nav) */
+  .ovr-banner{position:absolute;top:52px;left:12px;right:12px;z-index:36;background:var(--warn);color:#fff;
+    border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 3px 12px rgba(0,0,0,.25);}
+  .navstatus{position:absolute;left:0;right:0;bottom:92px;z-index:34;background:var(--scrim);color:#fff;
+    padding:10px 16px;display:flex;justify-content:space-between;font-size:13px;font-weight:600;}
+  .navstatus .on-line{color:#7ee0a6;}
+
+  /* share */
+  .sharemap{margin:14px;border-radius:14px;overflow:hidden;height:300px;position:relative;background:radial-gradient(100% 100% at 30% 20%,#3c5a3a,#27412a);}
+  .sharerow{display:flex;justify-content:space-around;padding:18px 0;}
+  .shareopt{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:13px;color:var(--ink);cursor:pointer;}
+  .shareopt .c{width:54px;height:54px;border-radius:50%;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;}
+  .shareopt .c svg{width:24px;height:24px;stroke:var(--primary-dark);fill:none;stroke-width:1.8;}
+  .shareopt.dim{opacity:.4;}
+
+  /* side guide */
+  .guide{max-width:300px;color:#aeb4bb;font-size:13px;line-height:1.85;background:#161a20;border-radius:14px;padding:18px 20px;}
+  .guide h3{color:#fff;font-size:15px;margin-bottom:10px;}
+  .guide b{color:#7ee0a6;}
+  .guide hr{border:none;border-top:1px solid #2a2f37;margin:12px 0;}
+  .guide .k{color:#fff;font-weight:600;}
+</style>
+</head>
+<body>
+
+<div class="phone"><div class="screen-host" id="host">
+  <div class="island"></div>
+
+  <!-- ===== 首页 ===== -->
+  <div class="screen active" id="home">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="scrollable" style="padding-top:54px;background:#F2F3F5;">
+      <div class="body">
+        <div class="sectit">本月</div>
+        <div class="card statcard">
+          <div><div class="v">3</div><div class="l">轨迹</div></div>
+          <div><div class="v">42.6</div><div class="l">里程 km</div></div>
+          <div><div class="v">2310</div><div class="l">爬升 m</div></div>
+        </div>
+        <div class="sectit">快捷</div>
+        <div class="quick">
+          <div class="q green" onclick="go('recording')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>开始记录</div>
+          <div class="q tint" onclick="go('offline')"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7" fill="none" stroke="#15803D" stroke-width="1.6"/></svg>离线地图</div>
+        </div>
+        <div class="sectit">活动 · 公告</div>
+        <div class="banner" onclick="toast('打开活动详情（运营发布）')"><b>周末徒步活动报名中</b><span>五台山经典环线 · 本周六出发</span></div>
+        <div class="notice"><span class="dot">•</span>公告：XX 路线近期施工，临时封闭，请绕行。</div>
+        <div class="notice"><span class="dot">•</span>活动：老白山看花线领队招募。</div>
+      </div>
+    </div>
+    <div class="tabbar" id="tabbar-home"></div>
+  </div>
+
+  <!-- ===== 地图（全屏） ===== -->
+  <div class="screen" id="map">
+    <div class="statusbar"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="mapwrap" onclick="mapTap(event)">
+      <svg class="bg" viewBox="0 0 360 700" preserveAspectRatio="none">
+        <g fill="none" stroke="#36C5C0" stroke-width="1.1" opacity=".5">
+          <path d="M-20,120 C60,80 120,160 200,120 C280,80 340,150 400,110"/>
+          <path d="M-20,200 C70,170 130,240 210,200 C290,160 350,230 400,190"/>
+          <path d="M-20,300 C80,270 140,350 220,310 C300,270 360,340 400,300"/>
+          <path d="M-20,420 C90,380 160,470 240,430 C310,395 360,460 400,420"/>
+          <path d="M-20,560 C100,520 180,610 260,560 C330,525 380,580 400,550"/>
+        </g>
+        <path d="M120,500 C140,450 110,410 150,380 C190,352 175,310 210,280 C245,252 235,215 270,195"
+          fill="none" stroke="#FF3B30" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <div class="pin" style="left:110px;top:488px;background:#1F9D55;">起</div>
+      <div class="pin" style="left:262px;top:182px;background:#FF3B30;">终</div>
+
+      <!-- 距离雷达叠加(默认关) -->
+      <div class="radar" id="radarMap">
+        <i style="width:90px;height:90px;"></i><i style="width:160px;height:160px;"></i><i style="width:230px;height:230px;"></i><i style="width:300px;height:300px;"></i>
+        <b style="left:0;top:-45px;">20km</b><b style="left:0;top:-80px;">40km</b><b style="left:0;top:-115px;">60km</b>
+        <div class="bear"></div>
+      </div>
+
+      <!-- 个人位置(带随方向旋转的箭头) -->
+      <div class="me" style="left:44%;top:46%;"><div class="acc"></div><div class="heading"><div class="cone"></div><div class="dot"></div></div></div>
+
+      <!-- 点击地图落点(十字) + 经纬度读数 -->
+      <div class="crosspin" id="crossMap"></div>
+
+      <!-- 经纬度信息条:靠上居中 -->
+      <div class="infobar"><span class="tag">WGS84</span> 41.6950°N 123.3443°E · 海拔39m · 定位误差22m</div>
+
+      <div class="ctrl" style="left:14px;top:96px;" onclick="back()"><svg viewBox="0 0 24 24" style="stroke:#1C1C1E;stroke-width:2.4;"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="ctrl" style="right:14px;top:96px;" onclick="openSheet('sheet-layer')"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><small>图层</small></div>
+      <div class="ctrl" style="right:14px;top:158px;" onclick="openSheet('sheet-overlay')"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="12" height="12" rx="2"/><rect x="9" y="9" width="11" height="11" rx="2" fill="#fff"/></svg><small>叠加</small></div>
+      <div class="ctrl" style="right:14px;top:220px;" onclick="openDrawer()"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5 5L4 17v3h3l5.7-5.7a4 4 0 0 0 5-5l-2.5 2.5-2-2z"/></svg><small>工具</small></div>
+
+      <div class="zoom" style="right:14px;top:296px;"><div><svg viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></div><div><svg viewBox="0 0 24 24"><line x1="6" y1="12" x2="18" y2="12"/></svg></div></div>
+      <div class="slider" style="right:24px;top:388px;"></div>
+      <div class="ctrl" style="right:14px;top:524px;"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/></svg><small>公里标</small></div>
+
+      <div class="ctrl fill" style="left:14px;top:470px;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="#1C1C1E" stroke-width="1.8" fill="none"/></svg><small>定位</small></div>
+      <div class="ctrl fill" style="left:14px;top:530px;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="#1C1C1E" stroke-width="1.8"/><circle cx="12" cy="12" r="2"/></svg><small>居中</small></div>
+
+      <div class="tapreadout" id="tapMap"><span>地图上的点 <span class="c" id="tapCoord">—</span> · 海拔 未知</span><span onclick="hideTap(event)" style="cursor:pointer;">✕</span></div>
+
+      <div class="ctabar">
+        <div class="btn light" onclick="go('recording')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>记录</div>
+        <div class="btn primary" onclick="go('tracks')"><svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 16 5 21z"/></svg>导航</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 记录中 ===== -->
+  <div class="screen" id="recording">
+    <div class="statusbar"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="mapwrap" style="flex:none;height:430px;">
+      <svg class="bg" viewBox="0 0 360 430" preserveAspectRatio="none">
+        <g fill="none" stroke="#36C5C0" stroke-width="1.1" opacity=".45">
+          <path d="M-20,110 C60,80 120,150 200,110 C280,75 340,140 400,105"/>
+          <path d="M-20,210 C70,180 130,250 210,210 C290,170 350,240 400,200"/>
+          <path d="M-20,330 C80,300 140,380 220,340 C300,300 360,370 400,330"/>
+        </g>
+        <path d="M150,380 C160,320 130,290 170,260 C205,235 195,195 225,165" fill="none" stroke="#FF3B30" stroke-width="4.5" stroke-linecap="round"/>
+      </svg>
+      <div class="pin" style="left:140px;top:368px;background:#1F9D55;">起</div>
+      <div class="me" style="left:60%;top:36%;"><div class="acc"></div><div class="dot"></div></div>
+      <div class="recbar"><span class="recdot"></span>记录中 00:42:15 · <span class="gps">GPS良好</span></div>
+      <div class="zoom" style="right:14px;top:150px;"><div><svg viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></div><div><svg viewBox="0 0 24 24"><line x1="6" y1="12" x2="18" y2="12"/></svg></div></div>
+    </div>
+    <div class="panel" style="flex:1;">
+      <div class="bignum"><span class="v">3.04</span><span class="u">km</span></div>
+      <div class="lbl">累计距离</div>
+      <div class="grid3">
+        <div><div class="v">00:38:02</div><div class="lbl">运动用时</div></div>
+        <div><div class="v">561<span style="font-size:13px;color:#6B7280;"> m</span></div><div class="lbl">当前海拔</div></div>
+        <div><div class="v up">↑120</div><div class="lbl">累计爬升 m</div></div>
+        <div><div class="v">4.8<span style="font-size:13px;color:#6B7280;"> km/h</span></div><div class="lbl">当前速度</div></div>
+        <div><div class="v dn">↓30</div><div class="lbl">累计下降 m</div></div>
+        <div><div class="v">792</div><div class="lbl">轨迹点</div></div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <div class="btn ghost" onclick="toast('已暂停')"><svg viewBox="0 0 24 24" style="width:18px;"><rect x="6" y="5" width="4" height="14" rx="1" fill="#1C1C1E"/><rect x="14" y="5" width="4" height="14" rx="1" fill="#1C1C1E"/></svg>暂停</div>
+        <div class="btn rec" onclick="toast('保存轨迹…'); go('tracks')"><svg viewBox="0 0 24 24" style="width:18px;"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>结束</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 轨迹库 ===== -->
+  <div class="screen" id="tracks">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="nav"><div class="title" style="margin-left:6px;">本地</div><div class="seg"><span class="on">本地</span><span style="opacity:.5">云端·三期</span></div><div class="right"><span style="color:var(--primary);font-size:14px;">管理</span></div></div>
+    <div class="scrollable"><div class="body">
+      <div class="searchbar"><input placeholder="🔍 请输入关键词"><div class="chip on" style="display:flex;align-items:center;">搜索</div></div>
+      <div class="filterrow"><div class="chip on">生成时间</div><div class="chip">记录时间</div><div class="chip">名称</div><div class="chip">筛选</div></div>
+      <div class="folder" onclick="toast('展开文件夹')"><span>▸ 下载的他人轨迹</span><span class="c">8 个轨迹</span></div>
+      <div class="folder" onclick="toast('展开文件夹')"><span>▸ 导入的轨迹</span><span class="c">163 个轨迹</span></div>
+      <div class="row" onclick="go('detailMap')">
+        <div class="thumb"><svg viewBox="0 0 74 74"><path d="M12 60 C20 40 14 34 26 28 C38 22 34 14 48 12" fill="none" stroke="#FF3B30" stroke-width="2.5"/></svg></div>
+        <div class="info"><div class="nm">本溪老母岭滴水洞环穿</div><div class="meta"><b>11.79</b> km · 04:05:47 · 📍29<br>纸伞 · 2026-05-17</div></div>
+      </div>
+      <div class="row" onclick="go('detailMap')">
+        <div class="thumb"><svg viewBox="0 0 74 74"><path d="M14 56 C28 48 20 36 34 30 C46 24 42 16 58 16" fill="none" stroke="#FF3B30" stroke-width="2.5"/></svg></div>
+        <div class="info"><div class="nm">老白山看花线</div><div class="meta"><b>36.60</b> km · 13:20:00 · 📍0<br>纸伞 · 2026-05-17</div></div>
+      </div>
+      <div class="row" onclick="go('detailMap')">
+        <div class="thumb"><svg viewBox="0 0 74 74"><path d="M16 58 C30 52 22 38 36 32 C50 26 44 18 60 20" fill="none" stroke="#FF3B30" stroke-width="2.5"/></svg></div>
+        <div class="info"><div class="nm">2026-05-17 09:20:47</div><div class="meta"><b>27.82</b> km · 03:56:18 · 📍0<br>纸伞 · 2026-05-17</div></div>
+      </div>
+    </div></div>
+    <div class="actionbar"><div class="btn ghost" onclick="go('import')">导入轨迹</div><div class="btn light" onclick="toast('创建文件夹（P1）')" style="background:var(--primary);color:#fff;">创建文件夹</div></div>
+    <div class="tabbar" id="tabbar-tracks"></div>
+  </div>
+
+  <!-- ===== 轨迹详情·地图 ===== -->
+  <div class="screen" id="detailMap">
+    <div class="statusbar"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="nav" style="background:rgba(255,255,255,.96);">
+      <div class="back" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="seg"><span class="on" onclick="swapDetail('detailMap')">地图</span><span onclick="swapDetail('detailStats')">详情</span><span onclick="toast('标注点：暂无')">标注点</span></div>
+      <div class="right"><div class="iconbtn" onclick="go('share')"><svg viewBox="0 0 24 24"><path d="M4 12v7h16v-7"/><path d="M12 16V4M8 8l4-4 4 4"/></svg></div><div class="iconbtn" onclick="openSheet('sheet-action')"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></div></div>
+    </div>
+    <div class="mapwrap">
+      <svg class="bg" viewBox="0 0 360 560" preserveAspectRatio="none">
+        <g fill="none" stroke="#36C5C0" stroke-width="1.1" opacity=".55">
+          <path d="M-20,100 C60,70 120,140 200,100 C280,65 340,130 400,95"/>
+          <path d="M-20,180 C70,150 130,220 210,180 C290,140 350,210 400,170"/>
+          <path d="M-20,280 C80,250 140,330 220,290 C300,250 360,320 400,280"/>
+          <path d="M-20,400 C90,360 160,450 240,410 C310,375 360,440 400,400"/>
+        </g>
+        <g fill="#36C5C0" font-size="9" opacity=".85"><text x="150" y="185">1000</text><text x="190" y="285">1280</text></g>
+        <path d="M90,300 C130,280 120,240 160,230 C210,218 200,180 250,180 C290,180 300,200 320,210" fill="none" stroke="#FF3B30" stroke-width="4" stroke-linecap="round"/>
+        <g fill="#FF3B30" stroke="#fff" stroke-width="1.5"><circle cx="160" cy="230" r="3.5"/><circle cx="250" cy="180" r="3.5"/></g>
+      </svg>
+      <div class="pin" style="left:80px;top:290px;background:#1F9D55;">起</div>
+      <div class="pin" style="left:312px;top:200px;background:#FF3B30;">终</div>
+      <div style="position:absolute;left:168px;top:222px;color:#ff5a4f;font-size:10px;font-weight:700;text-shadow:0 1px 2px #000;">10km</div>
+
+      <div class="ctrl" style="right:14px;top:20px;" onclick="openSheet('sheet-layer')"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><small>图层</small></div>
+      <div class="ctrl" style="right:14px;top:82px;" onclick="toast('海拔剖面图')"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-7 4 5"/></svg><small>分析图表</small></div>
+      <div class="ctrl" style="right:14px;top:144px;"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/></svg><small>公里标</small></div>
+      <div class="ctrl fill" style="left:14px;top:20px;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="#1C1C1E" stroke-width="1.8"/><circle cx="12" cy="12" r="2"/></svg><small>居中</small></div>
+      <div class="zoom" style="right:14px;top:330px;"><div><svg viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></div><div><svg viewBox="0 0 24 24"><line x1="6" y1="12" x2="18" y2="12"/></svg></div></div>
+    </div>
+    <div style="background:#fff;padding:10px 16px;display:flex;justify-content:space-around;text-align:center;border-top:1px solid var(--divider);">
+      <div><div style="font-size:18px;font-weight:700;">36.60</div><div class="lbl">公里</div></div>
+      <div><div style="font-size:18px;font-weight:700;">↑1970</div><div class="lbl">累计爬升 m</div></div>
+      <div><div style="font-size:18px;font-weight:700;">1692</div><div class="lbl">最高海拔 m</div></div>
+    </div>
+    <div class="actionbar"><div class="btn ghost" onclick="toast('已加载到地图'); tab('home'); go('map')">加载到地图</div><div class="btn primary" onclick="go('nav')">使用轨迹导航</div></div>
+  </div>
+
+  <!-- ===== 轨迹详情·详情 ===== -->
+  <div class="screen" id="detailStats">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="nav"><div class="back" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="seg"><span onclick="swapDetail('detailMap')">地图</span><span class="on">详情</span><span onclick="toast('标注点：暂无')">标注点</span></div>
+      <div class="right"><div class="iconbtn" onclick="go('share')"><svg viewBox="0 0 24 24"><path d="M4 12v7h16v-7"/><path d="M12 16V4M8 8l4-4 4 4"/></svg></div></div></div>
+    <div class="scrollable"><div class="body">
+      <div class="card"><div style="font-size:17px;font-weight:700;">📍 老白山看花线</div><div style="font-size:28px;font-weight:700;color:var(--primary);margin-top:4px;">36.60 <span style="font-size:14px;color:var(--ink2);">公里</span></div></div>
+      <div class="sectit">时间</div><div class="statgrid"><div class="statbox"><div class="l">运动耗时</div><div class="v">13:20:00</div></div><div class="statbox"><div class="l">休息时间</div><div class="v">01:05:00</div></div></div>
+      <div class="sectit">速度</div><div class="statgrid"><div class="statbox"><div class="l">运动均速</div><div class="v">2.7 km/h</div></div><div class="statbox"><div class="l">最快速度</div><div class="v">6.1 km/h</div></div></div>
+      <div class="sectit">爬升</div><div class="statgrid"><div class="statbox"><div class="l">累计爬升</div><div class="v">1970 m</div></div><div class="statbox"><div class="l">累计下降</div><div class="v">2300 m</div></div></div>
+      <div class="sectit">海拔</div><div class="statgrid"><div class="statbox"><div class="l">最高海拔</div><div class="v">1692 m</div></div><div class="statbox"><div class="l">最低海拔</div><div class="v">561 m</div></div></div>
+      <div class="sectit">数据</div><div class="statgrid"><div class="statbox"><div class="l">轨迹点数</div><div class="v">792</div></div><div class="statbox"><div class="l">标注点数</div><div class="v">0</div></div></div>
+    </div></div>
+    <div class="actionbar"><div class="btn primary" onclick="go('nav')">使用轨迹导航</div></div>
+  </div>
+
+  <!-- ===== 沿轨迹导航 ===== -->
+  <div class="screen" id="nav">
+    <div class="statusbar"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="mapwrap">
+      <svg class="bg" viewBox="0 0 360 660" preserveAspectRatio="none">
+        <g fill="none" stroke="#36C5C0" stroke-width="1.1" opacity=".5">
+          <path d="M-20,140 C60,110 120,180 200,140 C280,105 340,170 400,135"/>
+          <path d="M-20,260 C80,230 140,310 220,270 C300,230 360,300 400,260"/>
+          <path d="M-20,420 C90,380 160,470 240,430 C310,395 360,460 400,420"/>
+        </g>
+        <!-- 已走(灰) + 计划线(蓝) -->
+        <path d="M120,520 C140,470 110,430 150,400" fill="none" stroke="#9AA0A6" stroke-width="5" stroke-linecap="round"/>
+        <path d="M150,400 C190,372 175,330 210,300 C245,272 235,235 270,215" fill="none" stroke="#2D7FF9" stroke-width="5" stroke-linecap="round"/>
+      </svg>
+      <div class="pin" style="left:110px;top:508px;background:#1F9D55;">起</div>
+      <div class="pin" style="left:262px;top:202px;background:#FF3B30;">终</div>
+      <div class="me" style="left:42%;top:50%;"><div class="acc"></div><div class="dot"></div></div>
+
+      <div class="ovr-banner"><span>⚠</span> 已偏离计划线 27m，请返回</div>
+
+      <div class="ctrl" style="left:14px;top:96px;" onclick="back()"><svg viewBox="0 0 24 24" style="stroke:#1C1C1E;stroke-width:2.4;"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="ctrl" style="right:14px;top:96px;" onclick="openSheet('sheet-layer')"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><small>图层</small></div>
+      <div class="ctrl" style="right:14px;top:158px;" onclick="openSheet('sheet-overlay')"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="12" height="12" rx="2"/><rect x="9" y="9" width="11" height="11" rx="2" fill="#fff"/></svg><small>叠加</small></div>
+      <div class="zoom" style="right:14px;top:236px;"><div><svg viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></div><div><svg viewBox="0 0 24 24"><line x1="6" y1="12" x2="18" y2="12"/></svg></div></div>
+      <div class="ctrl" style="right:14px;top:330px;"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/></svg><small>公里标</small></div>
+
+      <div class="navstatus"><span>状态：<span class="on-line">在线</span></span><span>剩余 12.3km · 剩余 ↑680m</span></div>
+      <div class="ctabar" style="background:linear-gradient(to top,rgba(20,30,22,.95),rgba(20,30,22,0));">
+        <div class="btn ghost" onclick="toast('已暂停导航')"><svg viewBox="0 0 24 24" style="width:18px;"><rect x="6" y="5" width="4" height="14" rx="1" fill="#1C1C1E"/><rect x="14" y="5" width="4" height="14" rx="1" fill="#1C1C1E"/></svg>暂停</div>
+        <div class="btn rec" onclick="toast('结束导航'); back()"><svg viewBox="0 0 24 24" style="width:18px;"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>结束导航</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 分享 ===== -->
+  <div class="screen" id="share">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="nav"><div class="back" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div><div class="title">分享</div></div>
+    <div class="scrollable">
+      <div class="sharemap">
+        <svg viewBox="0 0 340 300" preserveAspectRatio="none" style="width:100%;height:100%;"><path d="M40 240 C90 200 70 150 130 140 C200 128 180 70 260 70" fill="none" stroke="#FF3B30" stroke-width="3.5"/></svg>
+        <div class="pin" style="left:32px;top:228px;background:#1F9D55;">起</div>
+        <div class="pin" style="left:250px;top:60px;background:#FF3B30;">终</div>
+        <div style="position:absolute;left:16px;bottom:12px;color:#fff;text-shadow:0 1px 3px #000;"><b style="font-size:22px;">36.60</b> km · 纸伞</div>
+      </div>
+      <div class="sharerow">
+        <div class="shareopt" onclick="toast('调起系统分享面板 → 微信/邮件…')"><div class="c"><svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/></svg></div>轨迹文件 GPX</div>
+        <div class="shareopt dim"><div class="c"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M3 17l5-4 4 3 3-2 6 5"/></svg></div>分享图 · P1</div>
+        <div class="shareopt dim"><div class="c"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></div>链接 · 三期</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 我的 ===== -->
+  <div class="screen" id="me">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="scrollable" style="padding-top:54px;background:#F2F3F5;"><div class="body">
+      <div class="card" style="display:flex;align-items:center;gap:14px;">
+        <div style="width:54px;height:54px;border-radius:50%;background:var(--primary-tint);display:flex;align-items:center;justify-content:center;font-size:24px;">🥾</div>
+        <div><div style="font-size:17px;font-weight:700;">本地模式</div><div class="lbl" style="margin-top:2px;cursor:pointer;color:var(--primary);" onclick="toast('登录/注册（三期）')">登录 / 注册 · 三期 ›</div></div>
+      </div>
+      <div class="sectit">入口</div>
+      <div class="group">
+        <div class="li" onclick="go('offline')"><span>📁 离线地图</span><span class="val">460MB ›</span></div>
+        <div class="li" onclick="go('import')"><span>⬇ 导入轨迹</span><span class="val">›</span></div>
+        <div class="li" onclick="go('settings')"><span>⚙ 设置</span><span class="val">›</span></div>
+        <div class="li" onclick="toast('关于本应用')"><span>ℹ 关于</span><span class="val">v0.1 ›</span></div>
+      </div>
+    </div></div>
+    <div class="tabbar" id="tabbar-me"></div>
+  </div>
+
+  <!-- ===== 离线地图 ===== -->
+  <div class="screen" id="offline">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="nav"><div class="back" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div><div class="title">离线地图</div></div>
+    <div class="scrollable"><div class="body">
+      <div class="sectit">下载新区域</div>
+      <div class="card">
+        <div style="height:120px;border-radius:10px;background:radial-gradient(100% 100% at 30% 20%,#3c5a3a,#27412a);position:relative;margin-bottom:12px;">
+          <div style="position:absolute;left:28%;top:24%;width:44%;height:50%;border:2px dashed #fff;border-radius:6px;"></div>
+          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:12px;">框选区域</div>
+        </div>
+        <div class="li" style="padding:10px 0;"><span>最高级别</span><span class="val">z16 ▾</span></div>
+        <div class="li" style="padding:10px 0;"><span>同时下载等高线</span><div class="toggle"></div></div>
+        <div class="li" style="padding:10px 0;border:none;"><span>预估体积</span><span class="val">~180 MB</span></div>
+        <div class="btn primary" style="margin-top:8px;" onclick="toast('开始下载…')">开始下载</div>
+      </div>
+      <div class="sectit">已下载（共 460MB）</div>
+      <div class="group">
+        <div class="li"><span>沈阳周边</span><span class="val">120MB · 删除</span></div>
+        <div class="li"><span>五台山</span><span class="val">340MB · 删除</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ===== 导入预览 ===== -->
+  <div class="screen" id="import">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="nav"><div class="back" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div><div class="title">导入轨迹</div></div>
+    <div class="scrollable"><div class="body">
+      <div style="height:200px;border-radius:14px;background:radial-gradient(100% 100% at 30% 20%,#3c5a3a,#27412a);position:relative;margin-bottom:14px;">
+        <svg viewBox="0 0 340 200" preserveAspectRatio="none" style="width:100%;height:100%;"><path d="M40 160 C90 130 70 90 130 80 C200 68 180 40 260 44" fill="none" stroke="#FF3B30" stroke-width="3"/></svg>
+      </div>
+      <div class="card"><div style="font-size:16px;font-weight:700;">老白山看花线</div>
+        <div class="meta" style="font-size:13px;color:var(--ink2);margin-top:6px;line-height:1.8;">距离 <b style="color:var(--ink)">36.60km</b> · 爬升 1970m · 航点 29</div></div>
+      <div class="notice"><span class="dot">⚠</span>该文件缺少时间戳；若含多条轨迹将全部导入。</div>
+    </div></div>
+    <div class="actionbar"><div class="btn ghost" onclick="back()">取消</div><div class="btn primary" onclick="toast('已导入'); tab('tracks')">确认导入</div></div>
+  </div>
+
+  <!-- ===== 设置 ===== -->
+  <div class="screen" id="settings">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 66</span></div>
+    <div class="nav"><div class="back" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div><div class="title">设置</div></div>
+    <div class="scrollable"><div class="body">
+      <div class="sectit">记录</div>
+      <div class="group">
+        <div class="li"><span>采样间隔</span><span class="val">5 秒 ▾</span></div>
+        <div class="li"><span>最小位移</span><span class="val">5 米 ▾</span></div>
+        <div class="li"><span>自动暂停</span><div class="toggle"></div></div>
+        <div class="li"><span>海拔来源</span><span class="val">气压计优先 ▾</span></div>
+      </div>
+      <div class="sectit">导航</div>
+      <div class="group">
+        <div class="li"><span>偏航阈值</span><span class="val">25 米 ▾</span></div>
+        <div class="li"><span>语音播报</span><div class="toggle off"></div></div>
+        <div class="li"><span>播报间隔</span><span class="val">5 分钟 ▾</span></div>
+        <div class="li"><span>导航时同时记录</span><div class="toggle"></div></div>
+      </div>
+      <div class="sectit">通用</div>
+      <div class="group">
+        <div class="li"><span>单位</span><span class="val">公制 ▾</span></div>
+        <div class="li" onclick="cycleFmt()"><span>坐标格式</span><span class="val" id="fmtVal">度 dd.ddddd° ▾</span></div>
+        <div class="li"><span>账号 · 三期</span><span class="val">›</span></div>
+      </div>
+      <div style="font-size:12px;color:var(--ink2);padding:0 6px;line-height:1.7;">坐标格式影响"点击地图取经纬度"的显示（度 / 度分秒 / UTM）。</div>
+    </div></div>
+  </div>
+
+  <!-- ===== 导出轨迹文件（参考 16.png） ===== -->
+  <div class="screen" id="exportFormats">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 96</span></div>
+    <div class="nav"><div class="back" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div><div class="title">导出轨迹文件</div></div>
+    <div class="scrollable"><div class="body">
+      <div class="group">
+        <div class="li" onclick="toast('导出 KML(轨迹) · P1')"><span>KML 格式（轨迹）<span style="color:var(--ink2);font-size:11px;">· P1</span></span><span class="val">›</span></div>
+        <div class="li" onclick="toast('导出 KML(路径) · P1')"><span>KML 格式（路径）<span style="color:var(--ink2);font-size:11px;">· P1</span></span><span class="val">›</span></div>
+      </div>
+      <div style="font-size:12px;color:var(--ink2);padding:0 6px 12px;line-height:1.7;">轨迹格式包含的信息更丰富，但部分第三方软件不兼容；路径格式仅包含经纬度和高度信息，兼容性更高。</div>
+      <div class="group">
+        <div class="li" onclick="toast('导出 GPX → 系统分享面板'); go('share')"><span>GPX 格式 <span style="color:var(--primary);font-size:11px;font-weight:700;">· MVP 默认</span></span><span class="val">›</span></div>
+      </div>
+      <div style="font-size:12px;color:var(--ink2);padding:0 6px 12px;line-height:1.7;">GPX 文件不保留标注点附件信息。</div>
+      <div class="group">
+        <div class="li" onclick="toast('导出 KMZ · P1')"><span>KMZ 格式 <span style="color:var(--ink2);font-size:11px;">· P1</span></span><span class="val">›</span></div>
+      </div>
+      <div style="font-size:12px;color:var(--ink2);padding:0 6px;line-height:1.7;">KMZ 可将标注点附件一起打包，信息更丰富但体积更大；仅打包本地已存在的附件，自动忽略云端附件。</div>
+    </div></div>
+  </div>
+
+  <!-- ===== 测距（参考 14.png） ===== -->
+  <div class="screen" id="measure">
+    <div class="statusbar"><span>17:08</span><span class="r">●●● 🛰 96</span></div>
+    <div class="mapwrap">
+      <svg class="bg" viewBox="0 0 360 700" preserveAspectRatio="none">
+        <g fill="none" stroke="#a06bd6" stroke-width="1" opacity=".35">
+          <circle cx="180" cy="300" r="60"/><circle cx="180" cy="300" r="120"/><circle cx="180" cy="300" r="180"/><circle cx="180" cy="300" r="240"/>
+        </g>
+        <path d="M180,300 L150,180 L210,90 L250,460" fill="none" stroke="#7E3FBF" stroke-width="3"/>
+        <g fill="#7E3FBF" stroke="#fff" stroke-width="1.5"><circle cx="180" cy="300" r="4"/><circle cx="150" cy="180" r="4"/><circle cx="210" cy="90" r="4"/><circle cx="250" cy="460" r="4"/></g>
+      </svg>
+      <div class="measbar">
+        <div class="ic" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div>
+        <div class="total">397.86 公里</div><div class="sp"></div>
+        <div class="ic" onclick="toast('撤销上一点')"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></div>
+        <div class="ic" onclick="toast('清空')"><svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></div>
+        <div class="ic" onclick="back()"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></div>
+      </div>
+      <div class="tapreadout on" style="bottom:30px;"><span>点击地图依次添加测量点，自动累计直线距离</span></div>
+    </div>
+  </div>
+
+  <!-- ===== 面积计算（参考 15.png） ===== -->
+  <div class="screen" id="area">
+    <div class="statusbar dark"><span>17:08</span><span class="r">●●● 🛰 96</span></div>
+    <div class="nav"><div class="back" onclick="back()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div><div class="title">面积计算</div></div>
+    <div class="mapwrap">
+      <div style="position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:35;background:var(--scrim);color:#fff;padding:7px 16px;border-radius:10px;font-size:14px;font-weight:700;">13371.412 平方千米 (Km²)</div>
+      <svg class="bg" viewBox="0 0 360 640" preserveAspectRatio="none">
+        <g fill="none" stroke="#a06bd6" stroke-width="1" opacity=".3"><circle cx="180" cy="320" r="70"/><circle cx="180" cy="320" r="140"/><circle cx="180" cy="320" r="210"/></g>
+        <polygon points="60,260 150,200 250,250 200,340 90,340" fill="rgba(255,59,48,.28)" stroke="#FF3B30" stroke-width="2.5"/>
+        <g fill="#FF3B30" stroke="#fff" stroke-width="1.5"><circle cx="60" cy="260" r="4"/><circle cx="150" cy="200" r="4"/><circle cx="250" cy="250" r="4"/><circle cx="200" cy="340" r="4"/><circle cx="90" cy="340" r="4"/></g>
+      </svg>
+    </div>
+    <div class="actionbar"><div class="btn primary" onclick="toast('添加顶点')">添加</div></div>
+  </div>
+
+  <!-- ===== 工具箱抽屉（参考 13.png） ===== -->
+  <div class="drawer-scrim" id="drawerScrim" onclick="closeDrawer()"></div>
+  <div class="drawer" id="drawer">
+    <div class="dt">工具箱</div>
+    <div class="toolrow" onclick="toast('添加兴趣点')"><div class="ic" style="background:#2D7FF9;">＋</div><div class="nm"><b>添加兴趣点</b><span>地图上选定一个点，设定名称后保存</span></div></div>
+    <div class="toolrow" onclick="toast('位置闹钟')"><div class="ic" style="background:#F2A60D;">⏰</div><div class="nm"><b>位置闹钟</b><span>地图上选定一个点，进入预警范围时提醒</span></div></div>
+    <div class="toolrow" onclick="toast('目的地')"><div class="ic" style="background:#1F9D55;">🎯</div><div class="nm"><b>目的地</b><span>地图上选定一个点，导航到该点</span></div></div>
+    <div class="toolrow" onclick="toast('手绘规划（P1）')"><div class="ic" style="background:#E0556B;">✎</div><div class="nm"><b>手绘规划</b><span>地图上选点，自动生成一条轨迹线</span></div></div>
+    <div class="toolrow" onclick="toast('经纬度换算')"><div class="ic" style="background:#7E3FBF;">◍</div><div class="nm"><b>经纬度换算</b><span>多种坐标格式换算</span></div></div>
+    <div class="toolrow" onclick="toast('指南针')"><div class="ic" style="background:#36C5C0;">🧭</div><div class="nm"><b>指南针</b><span>使用前请举起手机画 8 字校准</span></div></div>
+    <div class="toolrow" onclick="closeDrawer(); go('area')"><div class="ic" style="background:#F2730D;">▱</div><div class="nm"><b>面积计算</b><span>地图上选多个点，计算所围图形面积</span></div></div>
+    <div class="toolrow" onclick="closeDrawer(); go('measure')"><div class="ic" style="background:#15803D;">📏</div><div class="nm"><b>测距</b><span>地图上选多个点，计算累计直线距离</span></div></div>
+    <div class="toolrow" onclick="toast('紧急呼救')"><div class="ic" style="background:#FF3B30;">SOS</div><div class="nm"><b>紧急呼救</b><span>一键发送个人位置给紧急联系人</span></div></div>
+    <div class="toolrow" onclick="toast('使用教程')"><div class="ic" style="background:#6B7280;">🎓</div><div class="nm"><b>使用教程</b><span>新手必看</span></div></div>
+  </div>
+
+  <!-- ===== Sheets ===== -->
+  <div class="scrim" id="scrim" onclick="closeSheet()"></div>
+
+  <div class="sheet" id="sheet-layer">
+    <div class="sh-tit">图层</div>
+    <div class="lyrow on" onclick="pickLayer(this)"><div class="rb"></div>自带地形图（矢量·离线）</div>
+    <div class="lyrow" onclick="pickLayer(this)"><div class="rb"></div>T_Google 卫星<span class="on-line">可离线下载</span></div>
+    <div class="lyrow" onclick="pickLayer(this)"><div class="rb"></div>天地图卫星<span class="on-line">在线</span></div>
+    <div class="lyrow" onclick="pickLayer(this)"><div class="rb"></div>天地图（标准）<span class="on-line">在线</span></div>
+    <div class="lyrow" onclick="pickLayer(this)"><div class="rb"></div>高德道路卫星<span class="on-line">在线</span></div>
+    <div class="lyrow" onclick="pickLayer(this)"><div class="rb"></div>腾讯地图<span class="on-line">在线</span></div>
+    <div class="lyrow" onclick="pickLayer(this)"><div class="rb"></div>中科星图卫星<span class="on-line">在线</span></div>
+    <div class="sh-cancel" onclick="closeSheet(); go('offline')">管理离线地图 ›</div>
+  </div>
+
+  <div class="sheet" id="sheet-overlay">
+    <div class="sh-tit">地图叠加</div>
+    <div class="sectit" style="margin-top:0;">自有数据</div>
+    <div class="ovrow"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 18 L9 8 L14 14 L20 5"/></svg></div><div class="nm"><b>轨迹叠加</b><span>已选 12 条</span></div><div class="toggle"></div></div>
+    <div class="ovrow"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 21s7-6 7-11a7 7 0 0 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2"/></svg></div><div class="nm"><b>兴趣点叠加</b><span>0 个</span></div><div class="toggle off"></div></div>
+    <div class="sectit">官方数据</div>
+    <div class="ovrow"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg></div><div class="nm"><b>等高线叠加</b><span>40 区块离线可用</span></div><div class="toggle"></div></div>
+    <div class="ovrow" style="opacity:.45;"><div class="ic"><svg viewBox="0 0 24 24"><path d="M5 16c4-8 10-8 14 0"/></svg></div><div class="nm"><b>热力图叠加</b><span>MVP 不做</span></div><div class="toggle off"></div></div>
+    <div class="sectit">工具叠加</div>
+    <div class="ovrow"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><line x1="12" y1="3" x2="12" y2="1"/></svg></div><div class="nm"><b>距离雷达叠加</b><span>以个人位置为中心显示距离圈与方位（参考 12.png）</span></div><div class="toggle off" id="radarToggle" onclick="toggleRadar(this);event.stopPropagation();"></div></div>
+    <div class="sh-cancel" onclick="closeSheet()">完成</div>
+  </div>
+
+  <div class="sheet" id="sheet-action">
+    <div class="sh-tit">操作</div>
+    <div class="grid4">
+      <div class="act" onclick="toast('编辑')"><div class="c"><svg viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16z"/></svg></div>编辑</div>
+      <div class="act" onclick="closeSheet(); go('exportFormats')"><div class="c"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></div>导出轨迹文件</div>
+      <div class="act" onclick="closeSheet(); go('offline')"><div class="c"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/></svg></div>离线地图</div>
+      <div class="act" onclick="toast('添加标注点（P1）')"><div class="c"><svg viewBox="0 0 24 24"><path d="M12 21s7-6 7-11a7 7 0 0 0-14 0c0 5 7 11 7 11z"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="9" y1="10" x2="15" y2="10"/></svg></div>添加标注</div>
+      <div class="act" onclick="toast('重命名')"><div class="c"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/></svg></div>重命名</div>
+      <div class="act danger" onclick="closeSheet(); toast('已删除'); tab('tracks')"><div class="c"><svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></div>删除</div>
+    </div>
+    <div class="sh-cancel" onclick="closeSheet()">取消</div>
+  </div>
+
+</div></div>
+
+<!-- 侧边导航说明 -->
+<div class="guide">
+  <h3>🥾 可交互原型 · 使用说明</h3>
+  点击界面上的按钮即可跳转，体验完整页面关联关系。
+  <hr>
+  <div class="k">底部 Tab（4）</div>
+  首页 · 地图 · 轨迹 · 我的<br>
+  （地图与所有二级页自动隐藏 Tab）
+  <hr>
+  <div class="k">关键跳转链路</div>
+  • 首页 [开始记录] → 记录中<br>
+  • 地图 [记录] → 记录中；[导航] → 轨迹库<br>
+  • 地图 [图层]/[叠加]/[工具] → 面板/抽屉<br>
+  • 地图 点击空白处 → 取经纬度(格式见设置)<br>
+  • 工具箱 → 测距 / 面积计算<br>
+  • 叠加面板 → 距离雷达叠加(开/关)<br>
+  • 轨迹库 → 轨迹详情(地图/详情切换)<br>
+  • 详情 [⋮] → 操作菜单 → [导出轨迹文件]<br>
+  • 详情 [使用轨迹导航] → 导航页(偏航横幅)<br>
+  • 我的 → 离线地图 / 导入 / 设置(坐标格式)
+  <hr>
+  <div class="k">配色</div>
+  <span style="color:#1F9D55">■</span> 主绿 &nbsp;<span style="color:#FF3B30">■</span> 记录红 &nbsp;<span style="color:#2D7FF9">■</span> 计划线蓝 &nbsp;<span style="color:#36C5C0">■</span> 等高线青
+</div>
+
+<!-- toast -->
+<div id="toast" style="position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:12px 20px;border-radius:24px;font-size:14px;opacity:0;transition:.25s;pointer-events:none;z-index:999;"></div>
+
+<script>
+  const TAB_ROOT={home:'home',tracks:'tracks',me:'me'};
+  const NO_TAB=['map','recording','detailMap','detailStats','nav','share','offline','import','settings','exportFormats','measure','area'];
+  let stack=['home'];
+
+  function render(id){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));
+    // tab bars: build into each root screen's tabbar container
+    document.querySelectorAll('.tabbar').forEach(tb=>tb.innerHTML=tabHTML(id));
+  }
+  function tabHTML(cur){
+    const items=[['home','首页','M3 11l9-7 9 7v8a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'],
+      ['map','地图','M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14'],
+      ['tracks','轨迹','M4 18 L9 8 L14 14 L20 5'],
+      ['me','我的','M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20c0-4 4-6 8-6s8 2 8 6']];
+    let root=NO_TAB.includes(cur)?'':(TAB_ROOT[cur]||'');
+    return items.map(([id,nm,d])=>`<div class="t ${root===id?'on':''}" onclick="tab('${id}')"><svg viewBox="0 0 24 24"><path d="${d}"/></svg><span>${nm}</span></div>`).join('');
+  }
+  function go(id){stack.push(id);render(id);}
+  function back(){if(stack.length>1){stack.pop();render(stack[stack.length-1]);}}
+  function tab(id){stack=[id];render(id);}
+  function swapDetail(id){const i=stack.indexOf('detailMap')>-1||stack.indexOf('detailStats')>-1;render(id);stack[stack.length-1]=id;}
+  function openSheet(id){document.getElementById('scrim').classList.add('open');document.getElementById(id).classList.add('open');}
+  function closeSheet(){document.getElementById('scrim').classList.remove('open');document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('open'));}
+  function pickLayer(el){el.parentNode.querySelectorAll('.lyrow').forEach(r=>r.classList.remove('on'));el.classList.add('on');}
+  let tt;
+  function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity=1;clearTimeout(tt);tt=setTimeout(()=>t.style.opacity=0,1400);}
+
+  // 工具箱抽屉
+  function openDrawer(){document.getElementById('drawerScrim').classList.add('open');document.getElementById('drawer').classList.add('open');}
+  function closeDrawer(){document.getElementById('drawerScrim').classList.remove('open');document.getElementById('drawer').classList.remove('open');}
+
+  // 距离雷达叠加
+  function toggleRadar(el){el.classList.toggle('off');document.getElementById('radarMap').classList.toggle('on',!el.classList.contains('off'));}
+
+  // 坐标格式（设置里切换，影响点击地图取点的显示）
+  const FMTS=[['dd','度 dd.ddddd°','41.70123°N, 123.45130°E'],['dms','度分秒 DMS','41°42′04″N, 123°27′05″E'],['utm','UTM','51T 456789E 4623456N']];
+  let fmtIdx=0;
+  function cycleFmt(){fmtIdx=(fmtIdx+1)%FMTS.length;document.getElementById('fmtVal').textContent=FMTS[fmtIdx][1]+' ▾';}
+  // 点击地图取经纬度
+  function mapTap(e){
+    if(e.target.closest('.ctrl,.zoom,.slider,.ctabar,.infobar,.me,.pin,.tapreadout,.radar'))return;
+    const wrap=e.currentTarget,r=wrap.getBoundingClientRect();
+    const x=e.clientX-r.left,y=e.clientY-r.top;
+    const cp=document.getElementById('crossMap');cp.style.left=x+'px';cp.style.top=y+'px';cp.classList.add('on');
+    document.getElementById('tapCoord').textContent=FMTS[fmtIdx][2];
+    document.getElementById('tapMap').classList.add('on');
+  }
+  function hideTap(e){e.stopPropagation();document.getElementById('tapMap').classList.remove('on');document.getElementById('crossMap').classList.remove('on');}
+
+  render('home');
+</script>
+</body>
+</html>

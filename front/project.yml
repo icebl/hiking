@@ -1,0 +1,60 @@
+# XcodeGen 工程定义 —— 在 Mac 上执行 `xcodegen generate` 生成 Hiking.xcodeproj
+name: Hiking
+options:
+  bundleIdPrefix: com.hiking
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    from: "6.0.0"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "6.0.0"
+  CoreGPX:
+    url: https://github.com/vincentneo/CoreGPX
+    from: "0.9.0"
+
+targets:
+  Hiking:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+    dependencies:
+      - package: MapLibre
+      - package: GRDB
+      - package: CoreGPX
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hiking.app
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"   # iPhone
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: 徒步
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        # —— 定位权限 ——
+        NSLocationWhenInUseUsageDescription: 记录与导航徒步轨迹时需要使用你的位置。
+        NSLocationAlwaysAndWhenInUseUsageDescription: 徒步全程（含锁屏/后台）持续记录轨迹与偏航提醒，需要"始终允许"定位。
+        # —— 后台模式：后台连续定位（记录生死线）——
+        UIBackgroundModes:
+          - location
+        # —— 气压计海拔 ——
+        NSMotionUsageDescription: 使用气压计获取更稳定的海拔数据。
+        # —— 文件导入（GPX）——
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.topografix.gpx
+            UTTypeConformsTo: [public.xml]
+            UTTypeTagSpecification:
+              public.filename-extension: [gpx]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait

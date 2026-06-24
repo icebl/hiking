@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>徒步APP 视觉稿 · 地图 / 记录中</title>
+<style>
+  :root{
+    --primary:#1F9D55; --primary-dark:#15803D; --primary-tint:#E6F6EC;
+    --rec:#FF3B30; --warn:#F2730D; --info:#2D7FF9; --contour:#36C5C0;
+    --ink:#1C1C1E; --ink2:#6B7280; --card:#FFFFFF; --divider:#E5E7EB;
+    --scrim:rgba(18,20,24,.72);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{
+    font-family:-apple-system,"SF Pro Text","SF Pro Display","PingFang SC",system-ui,sans-serif;
+    background:#0e1116;color:#e8eaed;padding:40px 20px;
+    display:flex;flex-wrap:wrap;gap:48px;justify-content:center;align-items:flex-start;
+  }
+  .col{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .label{font-size:14px;color:#9aa0a6;letter-spacing:.5px;}
+  .label b{color:#fff;font-weight:600;}
+
+  /* iPhone frame */
+  .phone{
+    width:360px;height:780px;background:#000;border-radius:46px;
+    padding:11px;box-shadow:0 20px 60px rgba(0,0,0,.5);position:relative;
+  }
+  .screen{
+    width:100%;height:100%;border-radius:36px;overflow:hidden;position:relative;background:#1b2a1e;
+  }
+  .island{
+    position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    width:108px;height:30px;background:#000;border-radius:18px;z-index:50;
+  }
+  .statusbar{
+    position:absolute;top:0;left:0;right:0;height:50px;z-index:40;
+    display:flex;justify-content:space-between;align-items:center;padding:14px 26px 0;
+    font-size:14px;font-weight:600;color:#fff;
+  }
+  .statusbar .right{display:flex;gap:6px;align-items:center;font-size:12px;}
+
+  /* faux map */
+  .map{position:absolute;inset:0;background:
+      radial-gradient(120% 90% at 30% 20%,#3c5a3a 0%,#2f4a30 35%,#27412a 60%,#1f3724 100%);}
+  .map svg{position:absolute;inset:0;width:100%;height:100%;}
+
+  /* floating controls */
+  .ctrl{
+    position:absolute;width:44px;height:44px;border-radius:50%;background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:30;
+  }
+  .ctrl svg{width:22px;height:22px;stroke:#1C1C1E;fill:none;stroke-width:1.8;}
+  .ctrl.fill svg{fill:#1C1C1E;stroke:none;}
+  .ctrl small{position:absolute;bottom:-15px;font-size:9px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);white-space:nowrap;}
+
+  .zoom{position:absolute;right:14px;top:300px;width:44px;background:#fff;border-radius:22px;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:30;}
+  .zoom div{height:44px;display:flex;align-items:center;justify-content:center;}
+  .zoom div:first-child{border-bottom:1px solid var(--divider);}
+  .zoom svg{width:20px;height:20px;stroke:#1C1C1E;stroke-width:2.2;}
+  .slider{position:absolute;right:24px;top:392px;width:4px;height:120px;background:rgba(255,255,255,.6);
+    border-radius:2px;z-index:30;}
+  .slider::after{content:"";position:absolute;left:50%;top:40px;transform:translateX(-50%);
+    width:24px;height:24px;border-radius:50%;background:var(--primary);box-shadow:0 2px 6px rgba(0,0,0,.3);}
+
+  /* info bar */
+  .infobar{position:absolute;top:54px;left:12px;z-index:35;
+    background:var(--scrim);color:#fff;border-radius:10px;padding:7px 11px;
+    font-size:11.5px;font-weight:500;line-height:1.5;backdrop-filter:blur(6px);}
+  .infobar .coord{opacity:.92;} .infobar .tag{color:#7ee0a6;font-weight:700;}
+
+  /* bottom CTA bar (map) */
+  .ctabar{position:absolute;left:0;right:0;bottom:0;z-index:35;padding:14px 18px 30px;
+    display:flex;gap:12px;background:linear-gradient(to top,rgba(20,30,22,.92),rgba(20,30,22,0));}
+  .btn{flex:1;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+    gap:8px;font-size:17px;font-weight:600;}
+  .btn svg{width:20px;height:20px;}
+  .btn.primary{background:var(--primary);color:#fff;}
+  .btn.primary svg{fill:#fff;}
+  .btn.light{background:rgba(255,255,255,.95);color:#1C1C1E;}
+  .btn.light svg{fill:var(--primary);}
+  .btn.rec{background:var(--rec);color:#fff;} .btn.rec svg{fill:#fff;}
+
+  /* current location */
+  .me{position:absolute;left:42%;top:46%;z-index:25;}
+  .me .acc{position:absolute;width:90px;height:90px;border-radius:50%;background:rgba(45,127,249,.18);
+    border:1px solid rgba(45,127,249,.5);left:-45px;top:-45px;}
+  .me .dot{width:18px;height:18px;border-radius:50%;background:var(--info);border:3px solid #fff;
+    box-shadow:0 0 4px rgba(0,0,0,.4);position:relative;z-index:2;}
+
+  .pin{position:absolute;z-index:24;width:26px;height:26px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;border:2px solid #fff;
+    box-shadow:0 1px 4px rgba(0,0,0,.4);}
+
+  /* recording status */
+  .recbar{position:absolute;top:54px;left:50%;transform:translateX(-50%);z-index:35;
+    background:var(--scrim);color:#fff;border-radius:18px;padding:7px 14px;display:flex;align-items:center;gap:8px;
+    font-size:13px;font-weight:600;backdrop-filter:blur(6px);}
+  .recdot{width:9px;height:9px;border-radius:50%;background:var(--rec);box-shadow:0 0 0 0 rgba(255,59,48,.6);
+    animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,48,.6);}70%{box-shadow:0 0 0 8px rgba(255,59,48,0);}100%{box-shadow:0 0 0 0 rgba(255,59,48,0);}}
+  .recbar .gps{color:#7ee0a6;font-weight:700;}
+
+  /* data panel (recording) */
+  .panel{position:absolute;left:0;right:0;bottom:0;z-index:35;background:#fff;
+    border-radius:22px 22px 0 0;padding:18px 18px 28px;box-shadow:0 -4px 20px rgba(0,0,0,.15);}
+  .bignum{display:flex;align-items:baseline;gap:6px;}
+  .bignum .v{font-size:38px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;
+    font-family:-apple-system,"SF Pro Rounded",sans-serif;}
+  .bignum .u{font-size:15px;color:var(--ink2);font-weight:600;}
+  .lbl{font-size:12px;color:var(--ink2);font-weight:500;margin-top:2px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px 8px;margin:14px 0 18px;}
+  .grid .v{font-size:21px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;
+    font-family:-apple-system,"SF Pro Rounded",sans-serif;}
+  .grid .up{color:var(--primary);} .grid .dn{color:var(--ink2);}
+  .panel .row{display:flex;gap:12px;}
+
+  .legend{max-width:760px;color:#9aa0a6;font-size:12.5px;line-height:1.9;margin-top:8px;
+    background:#161a20;border-radius:12px;padding:16px 20px;}
+  .legend b{color:#fff;} .sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:5px;}
+</style>
+</head>
+<body>
+
+<!-- ============ 地图页 ============ -->
+<div class="col">
+  <div class="phone"><div class="screen">
+    <div class="island"></div>
+    <div class="statusbar"><span>17:08</span><span class="right">●●● 🛰 66</span></div>
+
+    <div class="map">
+      <svg viewBox="0 0 360 780" preserveAspectRatio="none">
+        <!-- contour lines -->
+        <g fill="none" stroke="#36C5C0" stroke-width="1.1" opacity="0.55">
+          <path d="M-20,120 C60,80 120,160 200,120 C280,80 340,150 400,110"/>
+          <path d="M-20,180 C70,150 130,220 210,180 C290,140 350,210 400,170"/>
+          <path d="M-20,250 C80,220 140,300 220,260 C300,220 360,290 400,250"/>
+          <path d="M-20,340 C90,300 150,390 230,350 C300,315 360,380 400,340"/>
+          <path d="M-20,440 C90,400 160,490 240,450 C310,415 360,480 400,440"/>
+          <path d="M-20,560 C100,520 170,610 250,560 C320,520 370,580 400,545"/>
+          <path d="M-20,660 C100,630 180,700 260,660 C330,628 380,680 400,650"/>
+        </g>
+        <g fill="#36C5C0" font-size="9" opacity="0.8" font-family="sans-serif">
+          <text x="150" y="255">1000</text><text x="180" y="345">1280</text><text x="200" y="445">1500</text>
+        </g>
+        <!-- track (red) with km dots -->
+        <path d="M120,520 C140,470 110,430 150,400 C190,372 175,330 210,300 C245,272 235,235 270,215"
+              fill="none" stroke="#FF3B30" stroke-width="4" stroke-linecap="round"/>
+        <g fill="#FF3B30" stroke="#fff" stroke-width="1.5">
+          <circle cx="150" cy="400" r="3.5"/><circle cx="210" cy="300" r="3.5"/>
+        </g>
+      </svg>
+      <!-- start/end pins -->
+      <div class="pin" style="left:110px;top:508px;background:#1F9D55;">起</div>
+      <div class="pin" style="left:262px;top:202px;background:#FF3B30;">终</div>
+      <!-- km labels -->
+      <div style="position:absolute;left:158px;top:392px;color:#ff5a4f;font-size:10px;font-weight:700;text-shadow:0 1px 2px #000;">2.0km</div>
+      <div style="position:absolute;left:218px;top:292px;color:#ff5a4f;font-size:10px;font-weight:700;text-shadow:0 1px 2px #000;">4.0km</div>
+    </div>
+
+    <!-- current location -->
+    <div class="me"><div class="acc"></div><div class="dot"></div></div>
+
+    <!-- info bar -->
+    <div class="infobar">
+      <div class="coord"><span class="tag">WGS84</span> 41.6950°N 123.3443°E</div>
+      <div class="coord">海拔 39m · 定位误差 22m</div>
+    </div>
+
+    <!-- right top controls -->
+    <div class="ctrl" style="right:14px;top:96px;"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16" y1="16" x2="21" y2="21"/></svg></div>
+    <div class="ctrl" style="right:14px;top:150px;"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><small>图层</small></div>
+    <div class="ctrl" style="right:14px;top:212px;"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="12" height="12" rx="2"/><rect x="9" y="9" width="11" height="11" rx="2" fill="#fff"/></svg><small>叠加</small></div>
+
+    <!-- zoom -->
+    <div class="zoom"><div><svg viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></div>
+      <div><svg viewBox="0 0 24 24"><line x1="6" y1="12" x2="18" y2="12"/></svg></div></div>
+    <div class="slider"></div>
+
+    <!-- left controls -->
+    <div class="ctrl fill" style="left:14px;top:560px;"><svg viewBox="0 0 24 24"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="6" fill="none" stroke="#1C1C1E" stroke-width="1.8"/><circle cx="12" cy="12" r="2"/></svg><small>居中</small></div>
+    <div class="ctrl fill" style="left:14px;top:620px;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="#1C1C1E" stroke-width="1.8" fill="none"/></svg><small>定位</small></div>
+
+    <!-- km button right-bottom -->
+    <div class="ctrl" style="right:14px;top:560px;"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/></svg><small>公里标</small></div>
+
+    <!-- bottom CTA -->
+    <div class="ctabar">
+      <div class="btn light"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>记录</div>
+      <div class="btn primary"><svg viewBox="0 0 24 24"><path d="M12 2 19 21 12 16 5 21z"/></svg>导航</div>
+    </div>
+  </div></div>
+  <div class="label"><b>① 地图</b>（全屏沉浸 · 隐藏底部 Tab）</div>
+</div>
+
+<!-- ============ 记录中页 ============ -->
+<div class="col">
+  <div class="phone"><div class="screen">
+    <div class="island"></div>
+    <div class="statusbar"><span>17:08</span><span class="right">●●● 🛰 66</span></div>
+
+    <div class="map" style="bottom:300px;">
+      <svg viewBox="0 0 360 480" preserveAspectRatio="none">
+        <g fill="none" stroke="#36C5C0" stroke-width="1.1" opacity="0.5">
+          <path d="M-20,120 C60,80 120,160 200,120 C280,80 340,150 400,110"/>
+          <path d="M-20,200 C70,170 130,240 210,200 C290,160 350,230 400,190"/>
+          <path d="M-20,300 C80,270 140,350 220,310 C300,270 360,340 400,300"/>
+          <path d="M-20,410 C90,370 160,460 240,420 C310,385 360,450 400,410"/>
+        </g>
+        <!-- live recorded track (red) -->
+        <path d="M150,420 C160,360 130,330 170,300 C205,275 195,235 225,205"
+              fill="none" stroke="#FF3B30" stroke-width="4.5" stroke-linecap="round"/>
+      </svg>
+      <div class="me" style="left:60%;top:38%;"><div class="acc"></div><div class="dot"></div></div>
+      <div class="pin" style="left:140px;top:410px;background:#1F9D55;">起</div>
+    </div>
+
+    <!-- recording status -->
+    <div class="recbar"><span class="recdot"></span>记录中 00:42:15 · <span class="gps">GPS良好</span></div>
+
+    <!-- right controls (zoom + km, minimal) -->
+    <div class="zoom" style="top:200px;"><div><svg viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></div>
+      <div><svg viewBox="0 0 24 24"><line x1="6" y1="12" x2="18" y2="12"/></svg></div></div>
+
+    <!-- data panel -->
+    <div class="panel">
+      <div class="bignum"><span class="v">3.04</span><span class="u">km</span></div>
+      <div class="lbl">累计距离</div>
+      <div class="grid">
+        <div><div class="v">00:38:02</div><div class="lbl">运动用时</div></div>
+        <div><div class="v">561<span style="font-size:13px;color:#6B7280;"> m</span></div><div class="lbl">当前海拔</div></div>
+        <div><div class="v up">↑120</div><div class="lbl">累计爬升 m</div></div>
+        <div><div class="v">4.8<span style="font-size:13px;color:#6B7280;"> km/h</span></div><div class="lbl">当前速度</div></div>
+        <div><div class="v dn">↓30</div><div class="lbl">累计下降 m</div></div>
+        <div><div class="v">792</div><div class="lbl">轨迹点</div></div>
+      </div>
+      <div class="row">
+        <div class="btn light" style="flex:1;"><svg viewBox="0 0 24 24" style="width:18px;"><rect x="6" y="5" width="4" height="14" rx="1" fill="#1C1C1E"/><rect x="14" y="5" width="4" height="14" rx="1" fill="#1C1C1E"/></svg>暂停</div>
+        <div class="btn rec" style="flex:1;"><svg viewBox="0 0 24 24" style="width:18px;"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>结束</div>
+      </div>
+    </div>
+  </div></div>
+  <div class="label"><b>② 记录中</b>（实时数据面板 + 暂停/结束）</div>
+</div>
+
+<!-- legend -->
+<div class="legend">
+  <b>配色图例：</b>
+  <span class="sw" style="background:#1F9D55"></span>主绿 #1F9D55（导航/起点/CTA）&nbsp;&nbsp;
+  <span class="sw" style="background:#FF3B30"></span>记录红 #FF3B30（记录中/实走线/结束）&nbsp;&nbsp;
+  <span class="sw" style="background:#2D7FF9"></span>信息蓝 #2D7FF9（当前位置/计划线）&nbsp;&nbsp;
+  <span class="sw" style="background:#36C5C0"></span>等高线青 #36C5C0<br>
+  <b>说明：</b>地图页全屏沉浸、不显示底部 Tab；控件用白底圆钮+阴影，信息条用深色半透明蒙层+白字。记录中页地图占上方、数据面板贴底（核心读数「距离」用 38px 圆体等宽数字，避免跳动）。
+  本文件为 HTML 高保真原型，用浏览器打开查看；颜色/字号/图标对应 <b>设计规范.md</b>，可直接落地 SwiftUI。
+</div>
+
+</body>
+</html>

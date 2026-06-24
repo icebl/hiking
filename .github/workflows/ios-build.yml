@@ -1,0 +1,55 @@
+name: iOS Build (unsigned IPA)
+
+# 在云端 macOS 上编译出未签名的 .ipa，供 Sideloadly/AltStore 用你的 Apple ID 重签后安装。
+# 触发：推送到 main，或在 Actions 页面手动运行（workflow_dispatch）。
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: front
+        run: xcodegen generate
+
+      - name: Build (no code signing)
+        working-directory: front
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Hiking.xcodeproj \
+            -scheme Hiking \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            clean build | xcpretty || xcodebuild \
+            -project Hiking.xcodeproj -scheme Hiking -configuration Release \
+            -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+
+      - name: Package unsigned IPA
+        working-directory: front
+        run: |
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
+          echo "App: $APP"
+          rm -rf Payload && mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qr Hiking-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hiking-unsigned-ipa
+          path: front/Hiking-unsigned.ipa
+          if-no-files-found: error
