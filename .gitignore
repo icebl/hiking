@@ -1,0 +1,14 @@
+# Xcode / iOS 构建产物（CI 会用 xcodegen 重新生成工程）
+front/*.xcodeproj
+front/build/
+front/DerivedData/
+front/Payload/
+front/*.ipa
+**/.DS_Store
+
+# 依赖缓存
+**/.swiftpm
+**/Pods/
+
+# 其他
+*.log
