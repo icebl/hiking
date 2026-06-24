@@ -33,13 +33,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.hiking.app
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"   # iPhone
     info:
       path: Resources/Info.plist
       properties:
         CFBundleDisplayName: 徒步
+        # —— 启动屏：必须显式声明，否则 iOS 信箱模式渲染、上下出现黑边、拿不到全屏分辨率 ——
+        UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         # —— 定位权限 ——
