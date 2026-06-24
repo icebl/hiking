@@ -126,13 +126,14 @@ struct MapScreen: View {
             Capsule().fill(Color.white.opacity(0.6)).frame(width: 4, height: 110)
             Circle().fill(AppColor.primary).frame(width: 24, height: 24)
                 .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
-                .offset(y: (1 - zoomLevel) * 86)
+                .offset(y: CGFloat(1 - zoomLevel) * 86)
         }
         .frame(width: 24, height: 110)
         .contentShape(Rectangle())
         .gesture(
             DragGesture().onChanged { v in
-                zoomLevel = min(1, max(0, 1 - v.location.y / 110))
+                let frac = 1 - Double(v.location.y) / 110
+                zoomLevel = min(1, max(0, frac))
             }
         )
     }
