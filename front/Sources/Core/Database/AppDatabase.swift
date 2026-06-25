@@ -91,6 +91,21 @@ final class AppDatabase {
                 t.column("pointCount", .integer).notNull().defaults(to: 0)
             }
         }
+
+        // v2：文件夹（轨迹分组）
+        m.registerMigration("v2_folders") { db in
+            try db.create(table: "folder") { t in
+                t.primaryKey("id", .text)
+                t.column("name", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.column("isDeleted", .boolean).notNull().defaults(to: false)
+                t.column("isSynced", .boolean).notNull().defaults(to: false)
+            }
+            try db.alter(table: "track") { t in
+                t.add(column: "folderId", .text)   // 关联 folder.id；nil = 未分组
+            }
+        }
         return m
     }
 }

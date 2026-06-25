@@ -38,6 +38,7 @@ struct TrackDetailView: View {
         }
         .navigationTitle(track?.name ?? "轨迹详情")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)   // 二级页隐藏底部 Tab（页面结构规则）
         .task {
             track = try? TrackRepository().track(id: trackId)
             points = (try? TrackRepository().points(trackId: trackId)) ?? []

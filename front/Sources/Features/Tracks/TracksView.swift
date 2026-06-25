@@ -7,34 +7,175 @@ final class ImportCoordinator: ObservableObject {
     @Published var pendingURL: URL?
 }
 
-/// 轨迹库（任务 6.2）：本地轨迹列表 → 详情。
+/// 轨迹库（任务 6.2，参照图3）：全屏沉浸；本地/云端分段 + 搜索 + 文件夹分组 + 滑删/移动。
+/// 外层 NavigationStack 由 RootTabView 提供（此处不再嵌套）。
 struct TracksView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var segment = 0           // 0 本地 / 1 云端
+    @State private var search = ""
     @State private var tracks: [Track] = []
+    @State private var folders: [Folder] = []
+    @State private var expanded: Set<String> = ["ungrouped"]
+    @State private var showImport = false
+    @State private var showCreateFolder = false
+    @State private var newFolderName = ""
+    @State private var moveTarget: Track?
+
+    private let repo = TrackRepository()
 
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(tracks) { t in
-                    NavigationLink(value: t.id) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(t.name).font(.system(size: 15, weight: .semibold))
-                            Text(String(format: "%.2f km · ↑%.0f m · %@",
-                                        t.distance / 1000, t.ascent, t.source == .recorded ? "记录" : "导入"))
-                                .font(.caption).foregroundColor(AppColor.ink2)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("轨迹")
-            .navigationDestination(for: UUID.self) { TrackDetailView(trackId: $0) }
-            .toolbar { ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink { ImportPreviewView() } label: { Image(systemName: "square.and.arrow.down") }
-            } }
-            .onAppear { reload() }   // 返回即刷新（含导入后）
+        VStack(spacing: 0) {
+            header
+            if segment == 0 { localList } else { cloudPlaceholder }
+            bottomBar
+        }
+        .navigationBarHidden(true)
+        .navigationDestination(for: UUID.self) { TrackDetailView(trackId: $0) }
+        .onAppear(perform: reload)
+        .sheet(isPresented: $showImport, onDismiss: reload) {
+            NavigationStack { ImportPreviewView() }
+        }
+        .alert("新建文件夹", isPresented: $showCreateFolder) {
+            TextField("文件夹名称", text: $newFolderName)
+            Button("创建") { createFolder() }
+            Button("取消", role: .cancel) {}
+        }
+        .confirmationDialog("移动到文件夹", isPresented: Binding(
+            get: { moveTarget != nil }, set: { if !$0 { moveTarget = nil } }
+        ), presenting: moveTarget) { t in
+            ForEach(folders) { f in Button(f.name) { move(t, to: f.id) } }
+            Button("未分组") { move(t, to: nil) }
+            Button("取消", role: .cancel) {}
         }
     }
 
-    private func reload() { tracks = (try? TrackRepository().listTracks()) ?? [] }
+    // MARK: - 顶部
+    private var header: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.left").font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(AppColor.primary)
+                    }
+                    Spacer()
+                }
+                Picker("", selection: $segment) {
+                    Text("本地").tag(0); Text("云端").tag(1)
+                }.pickerStyle(.segmented).frame(width: 160)
+            }
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundColor(AppColor.ink2)
+                TextField("请输入关键词", text: $search)
+                    .autocorrectionDisabled().textInputAutocapitalization(.never)
+            }
+            .padding(.vertical, 8).padding(.horizontal, 10)
+            .background(Color(hex: 0xF2F3F5)).cornerRadius(10)
+        }
+        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 10)
+    }
+
+    // MARK: - 本地列表
+    private var localList: some View {
+        List {
+            ForEach(folders) { f in
+                groupSection(title: f.name, key: f.id.uuidString, items: tracksIn(f.id))
+            }
+            groupSection(title: "未分组", key: "ungrouped", items: ungrouped)
+        }
+        .listStyle(.plain)
+    }
+
+    private func groupSection(title: String, key: String, items: [Track]) -> some View {
+        Section {
+            if expanded.contains(key) {
+                if items.isEmpty {
+                    Text("（空）").font(.caption).foregroundColor(AppColor.ink2)
+                } else {
+                    ForEach(items) { trackRow($0) }
+                }
+            }
+        } header: {
+            Button { toggle(key) } label: {
+                HStack {
+                    Image(systemName: expanded.contains(key) ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 12, weight: .bold))
+                    Text(title).font(.system(size: 14, weight: .semibold))
+                    Spacer()
+                    Text("\(items.count) 条").font(.caption)
+                }.foregroundColor(AppColor.ink)
+            }
+        }
+    }
+
+    private func trackRow(_ t: Track) -> some View {
+        NavigationLink(value: t.id) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t.name).font(.system(size: 15, weight: .semibold))
+                Text(String(format: "%.2f km · ↑%.0f m · %@ · %@",
+                            t.distance / 1000, t.ascent,
+                            t.source == .recorded ? "记录" : "导入", Self.df.string(from: t.createdAt)))
+                    .font(.caption).foregroundColor(AppColor.ink2)
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) { delete(t) } label: { Label("删除", systemImage: "trash") }
+            Button { moveTarget = t } label: { Label("移动", systemImage: "folder") }.tint(AppColor.info)
+        }
+    }
+
+    // MARK: - 云端占位
+    private var cloudPlaceholder: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "cloud").font(.system(size: 44)).foregroundColor(AppColor.ink2)
+            Text("登录后云端同步 · 三期").foregroundColor(AppColor.ink2)
+            Spacer()
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - 底部按钮
+    private var bottomBar: some View {
+        HStack(spacing: 12) {
+            Button { showImport = true } label: {
+                Text("导入轨迹").fontWeight(.semibold).foregroundColor(AppColor.ink)
+                    .frame(maxWidth: .infinity).frame(height: 50)
+                    .overlay(RoundedRectangle(cornerRadius: AppRadius.button).stroke(AppColor.divider))
+            }
+            Button { newFolderName = ""; showCreateFolder = true } label: {
+                Text("创建文件夹").fontWeight(.semibold).foregroundColor(.white)
+                    .frame(maxWidth: .infinity).frame(height: 50)
+                    .background(AppColor.primary).cornerRadius(AppRadius.button)
+            }
+        }.padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    // MARK: - 数据/动作
+    private var shown: [Track] {
+        let q = search.trimmingCharacters(in: .whitespaces)
+        return q.isEmpty ? tracks : tracks.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+    private var ungrouped: [Track] { shown.filter { $0.folderId == nil } }
+    private func tracksIn(_ id: UUID) -> [Track] { shown.filter { $0.folderId == id } }
+
+    private func toggle(_ key: String) {
+        if expanded.contains(key) { expanded.remove(key) } else { expanded.insert(key) }
+    }
+    private func reload() {
+        tracks = (try? repo.listTracks()) ?? []
+        folders = (try? repo.listFolders()) ?? []
+    }
+    private func delete(_ t: Track) { try? repo.softDelete(id: t.id); reload() }
+    private func move(_ t: Track, to folderId: UUID?) { try? repo.moveTrack(id: t.id, to: folderId); reload() }
+    private func createFolder() {
+        let name = newFolderName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        try? repo.createFolder(name: name); reload()
+    }
+
+    private static let df: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f
+    }()
 }
 
 /// 导入预览（任务 5.3/5.4）：文件来自外部打开或应用内选择 → 解析 → 预览 → 确认入库。

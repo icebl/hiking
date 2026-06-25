@@ -14,9 +14,11 @@ final class NavigationController: ObservableObject {
     @Published var isOffRoute = false
     @Published var arrived = false
     @Published var reverse = false
+    @Published var isRecording = false              // 是否同时记录实走
 
     private let engine = NavigationEngine()
     private let location = LocationManager.shared
+    private let recorder = RecordingController()     // 同时记录实走轨迹（任务 4.5）
     private var line: NavigationEngine.PlannedLine?
     private var cancellables = Set<AnyCancellable>()
     private var lastOffRoute = false
@@ -24,10 +26,12 @@ final class NavigationController: ObservableObject {
 
     private let arriveThreshold: Double = 30        // 接近终点（m）
 
-    func start(trackId: UUID, reverse: Bool) {
+    func start(trackId: UUID, reverse: Bool, alsoRecord: Bool) {
         guard !running else { return }
         running = true
         self.reverse = reverse
+
+        if alsoRecord { recorder.start(); isRecording = true }
 
         let pts = (try? TrackRepository().points(trackId: trackId)) ?? []
         let l = NavigationEngine.buildLine(points: pts, reverse: reverse)
@@ -44,9 +48,14 @@ final class NavigationController: ObservableObject {
 
     func stop() {
         running = false
-        location.stop()
         cancellables.removeAll()
+        if !isRecording { location.stop() }   // 同时记录时由 recorder 收尾停定位
     }
+
+    /// 结束并保存实走轨迹（同时记录时）。
+    func finishSaving() { _ = try? recorder.finish(); isRecording = false; location.stop() }
+    /// 结束并丢弃实走轨迹。
+    func finishDiscarding() { recorder.cancel(); isRecording = false; location.stop() }
 
     // MARK: - 定位驱动
     private func onLocation(_ loc: CLLocation) {

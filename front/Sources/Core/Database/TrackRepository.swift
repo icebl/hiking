@@ -6,13 +6,56 @@ struct TrackRepository {
     let db: AppDatabase
     init(db: AppDatabase = .shared) { self.db = db }
 
-    // 轨迹列表（未删除，按创建时间倒序）
-    func listTracks() throws -> [Track] {
+    // 轨迹列表（未删除，按创建时间倒序）；search 非空时按名称过滤。
+    func listTracks(search: String = "") throws -> [Track] {
         try db.dbQueue.read { dbx in
-            try Track
-                .filter(Column("isDeleted") == false)
-                .order(Column("createdAt").desc)
-                .fetchAll(dbx)
+            var request = Track.filter(Column("isDeleted") == false)
+            let q = search.trimmingCharacters(in: .whitespaces)
+            if !q.isEmpty { request = request.filter(Column("name").like("%\(q)%")) }
+            return try request.order(Column("createdAt").desc).fetchAll(dbx)
+        }
+    }
+
+    // MARK: - 文件夹（任务2）
+
+    func listFolders() throws -> [Folder] {
+        try db.dbQueue.read { dbx in
+            try Folder.filter(Column("isDeleted") == false)
+                .order(Column("createdAt").desc).fetchAll(dbx)
+        }
+    }
+
+    @discardableResult
+    func createFolder(name: String) throws -> Folder {
+        var f = Folder(name: name)
+        try db.dbQueue.write { dbx in try f.save(dbx) }
+        return f
+    }
+
+    func renameFolder(id: UUID, name: String) throws {
+        _ = try db.dbQueue.write { dbx in
+            try Folder.filter(key: id.uuidString)
+                .updateAll(dbx, Column("name").set(to: name), Column("updatedAt").set(to: Date()))
+        }
+    }
+
+    /// 删除文件夹（软删）并把其下轨迹移出（folderId 置 nil）。
+    func deleteFolder(id: UUID) throws {
+        try db.dbQueue.write { dbx in
+            try Track.filter(Column("folderId") == id.uuidString)
+                .updateAll(dbx, Column("folderId").set(to: nil), Column("updatedAt").set(to: Date()))
+            try Folder.filter(key: id.uuidString)
+                .updateAll(dbx, Column("isDeleted").set(to: true),
+                           Column("isSynced").set(to: false), Column("updatedAt").set(to: Date()))
+        }
+    }
+
+    /// 把轨迹移动到文件夹（folderId 为 nil = 移到未分组）。
+    func moveTrack(id: UUID, to folderId: UUID?) throws {
+        _ = try db.dbQueue.write { dbx in
+            try Track.filter(key: id.uuidString)
+                .updateAll(dbx, Column("folderId").set(to: folderId?.uuidString),
+                           Column("isSynced").set(to: false), Column("updatedAt").set(to: Date()))
         }
     }
 

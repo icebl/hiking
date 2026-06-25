@@ -27,6 +27,8 @@ struct Track: Codable, Identifiable, Syncable, FetchableRecord, MutablePersistab
     var isDeleted: Bool
     var isSynced: Bool
 
+    var folderId: UUID?         // 所属文件夹（nil = 未分组）
+
     // 统计（结算后写入；导入时解析）
     var distance: Double        // 米
     var movingTime: Double      // 运动用时（秒）
@@ -46,9 +48,30 @@ struct Track: Codable, Identifiable, Syncable, FetchableRecord, MutablePersistab
         let now = Date()
         self.createdAt = now; self.updatedAt = now
         self.isDeleted = false; self.isSynced = false
+        self.folderId = nil
         self.distance = 0; self.movingTime = 0; self.totalTime = 0
         self.ascent = 0; self.descent = 0
         self.maxElevation = nil; self.minElevation = nil; self.pointCount = 0
+    }
+}
+
+// MARK: - Folder（轨迹文件夹/分组）
+struct Folder: Codable, Identifiable, Syncable, FetchableRecord, MutablePersistableRecord {
+    var id: UUID
+    var name: String
+    var createdAt: Date
+    var updatedAt: Date
+    var isDeleted: Bool
+    var isSynced: Bool
+
+    static let databaseTableName = "folder"
+
+    init(name: String) {
+        self.id = UUID()
+        self.name = name
+        let now = Date()
+        self.createdAt = now; self.updatedAt = now
+        self.isDeleted = false; self.isSynced = false
     }
 }
 

@@ -101,6 +101,14 @@ final class RecordingController: ObservableObject {
         return track
     }
 
+    /// 取消并丢弃在记轨迹（导航同时记录选“不保存”用）。
+    func cancel() {
+        timer?.invalidate(); timer = nil
+        location.stop(); altimeter.stop(); cancellables.removeAll()
+        if let id = trackId { try? repo.deleteSession(id: id); try? repo.hardDelete(id: id) }
+        reset()
+    }
+
     // MARK: - 崩溃恢复的非续记分支（启动弹窗用，无需活动传感器）
 
     /// 结束并保存：用已存点补算统计并写入，删会话。
