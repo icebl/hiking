@@ -166,7 +166,11 @@ struct TracksView: View {
         folders = (try? repo.listFolders()) ?? []
     }
     private func delete(_ t: Track) { try? repo.softDelete(id: t.id); reload() }
-    private func move(_ t: Track, to folderId: UUID?) { try? repo.moveTrack(id: t.id, to: folderId); reload() }
+    private func move(_ t: Track, to folderId: UUID?) {
+        try? repo.moveTrack(id: t.id, to: folderId)
+        if let fid = folderId { expanded.insert(fid.uuidString) }   // 展开目标文件夹，立刻可见
+        reload()
+    }
     private func createFolder() {
         let name = newFolderName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }

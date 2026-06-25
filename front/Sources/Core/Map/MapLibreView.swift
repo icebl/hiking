@@ -91,6 +91,11 @@ struct MapLibreView: UIViewRepresentable {
             return HeadingUserLocationView()
         }
 
+        // 跟随模式变化（用户拖动会打断 .follow）→ 同步定位键高亮
+        func mapView(_ mapView: MLNMapView, didChange mode: MLNUserTrackingMode, animated: Bool) {
+            parent.controller?.syncTrackingMode(mode)
+        }
+
         // 缩放级别读数回填（任务诊断用）
         func mapViewRegionIsChanging(_ mapView: MLNMapView) {
             parent.controller?.zoom = mapView.zoomLevel

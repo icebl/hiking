@@ -9,6 +9,10 @@ final class MapController: ObservableObject {
     /// 当前地图缩放级别（诊断/读数用，由 MapLibreView 在地图变动时回填）。
     @Published var zoom: Double = 0
 
+    /// 定位键状态（单击循环：居中一次 → 跟随 → 关闭）。
+    enum LocateState { case off, centered, following }
+    @Published var locateState: LocateState = .off
+
     var minZoom: Double = 1
     var maxZoom: Double = 18
 
@@ -31,20 +35,26 @@ final class MapController: ObservableObject {
         m.setZoomLevel(minZoom + (maxZoom - minZoom) * clamped, animated: false)
     }
 
-    /// 定位：移到当前位置并进入跟随模式
-    func recenterOnUser() {
+    /// 定位键单击：off → 居中一次；centered → 进入跟随；following → 关闭。
+    func cycleLocate() {
         guard let m = mapView else { return }
-        if let loc = m.userLocation?.location {
-            m.setCenter(loc.coordinate, zoomLevel: max(m.zoomLevel, 14), animated: true)
+        switch locateState {
+        case .off:
+            if let loc = m.userLocation?.location {
+                m.setCenter(loc.coordinate, zoomLevel: max(m.zoomLevel, 14), animated: true)
+            }
+            locateState = .centered
+        case .centered:
+            m.userTrackingMode = .follow      // 进入跟随
+            locateState = .following
+        case .following:
+            m.userTrackingMode = .none
+            locateState = .off
         }
-        m.userTrackingMode = .follow
     }
 
-    /// 居中：回到当前位置但不进入跟随模式
-    func center() {
-        guard let m = mapView else { return }
-        guard let loc = m.userLocation?.location else { return }
-        m.userTrackingMode = .none
-        m.setCenter(loc.coordinate, animated: true)
+    /// 同步系统跟随模式变化（用户拖动地图会打断跟随 → 复位按钮高亮）。
+    func syncTrackingMode(_ mode: MLNUserTrackingMode) {
+        if mode == .none && locateState == .following { locateState = .off }
     }
 }

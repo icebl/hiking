@@ -131,3 +131,13 @@ struct RecordingSession: Codable, Identifiable, FetchableRecord, MutablePersista
 
     static let databaseTableName = "recordingSession"
 }
+
+// MARK: - UUID 存储策略
+// GRDB 默认把 UUID 存为 16 字节 blob；本项目所有按 ID 的查询/更新都用 `uuidString`（文本，
+// 如 filter(key: id.uuidString)、Column("trackId") == ...uuidString）。若不统一为文本编码，
+// 文本≠blob 会导致按 ID 的更新/查询全部静默失败（移动轨迹无效、记录统计为 0、详情取不到点等）。
+extension Track            { static var databaseUUIDEncodingStrategy: DatabaseUUIDEncodingStrategy { .uppercaseString } }
+extension Folder           { static var databaseUUIDEncodingStrategy: DatabaseUUIDEncodingStrategy { .uppercaseString } }
+extension TrackPoint       { static var databaseUUIDEncodingStrategy: DatabaseUUIDEncodingStrategy { .uppercaseString } }
+extension Waypoint         { static var databaseUUIDEncodingStrategy: DatabaseUUIDEncodingStrategy { .uppercaseString } }
+extension RecordingSession { static var databaseUUIDEncodingStrategy: DatabaseUUIDEncodingStrategy { .uppercaseString } }

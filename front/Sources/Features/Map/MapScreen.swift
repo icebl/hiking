@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 地图（全屏沉浸，任务 2.x）：底图 + 悬浮控件 + 居中信息条 + 底部记录/导航 + 点击取经纬度。
 /// 控件布局对齐 UI/视觉稿/原型.html：
-///   左列：返回 / 定位 / 居中
+///   左列：返回 / 定位键（居中→跟随循环）
 ///   右列：图层 / 叠加 / 工具 / 缩放(+/-) / 缩放滑块 / 公里标
 struct MapScreen: View {
     @Environment(\.dismiss) private var dismiss
@@ -24,15 +24,12 @@ struct MapScreen: View {
             }
             .padding(.top, 6)
 
-            // 左列：返回（顶）/ 定位 / 居中（中下）
+            // 左列：返回（顶）/ 定位键（中）
             HStack {
                 VStack(spacing: 0) {
                     ctrl("chevron.left") { dismiss() }
                     Spacer()
-                    VStack(spacing: 14) {
-                        ctrl("location.fill", "定位", filled: true) { mapCtrl.recenterOnUser() }
-                        ctrl("scope", "居中") { mapCtrl.center() }
-                    }
+                    locateButton
                     Spacer()
                 }
                 Spacer()
@@ -146,6 +143,18 @@ struct MapScreen: View {
                 mapCtrl.setZoom(fraction: zoomLevel)
             }
         )
+    }
+
+    /// 定位键（单击循环：居中一次 → 跟随 → 关闭；跟随时高亮）
+    private var locateButton: some View {
+        Button { mapCtrl.cycleLocate() } label: {
+            Image(systemName: mapCtrl.locateState == .off ? "location" : "location.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(mapCtrl.locateState == .following ? AppColor.primary : AppColor.ink)
+                .frame(width: 44, height: 44)
+                .background(Color.white).clipShape(Circle())
+                .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
+        }
     }
 
     /// 悬浮圆形控件（可带下方小标签），filled 用于实心图标
