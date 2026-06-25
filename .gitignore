@@ -6,6 +6,11 @@ front/Payload/
 front/*.ipa
 **/.DS_Store
 ipa/
+tools/data
+tools/jdk-21.0.11+10
+tools/jdk21.zip
+tools/planetiler.jar
+
 
 # 依赖缓存
 **/.swiftpm
