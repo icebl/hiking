@@ -121,6 +121,7 @@ struct MapLibreView: UIViewRepresentable {
         }
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
             parent.controller?.zoom = mapView.zoomLevel
+            rebuildArrows(on: mapView)      // 缩放变化时按比例尺调整箭头密度
         }
 
         /// 绘制/更新轨迹折线 + 起终点圈 + 方向箭头（任务 2.4 / 图7）。
@@ -141,21 +142,37 @@ struct MapLibreView: UIViewRepresentable {
                 style.addLayer(layer)
                 trackSource = src
                 if parent.fitToTrack {           // 仅完整/计划轨迹（详情、导航）画起终点+箭头；记录中的实时线不画
-                    addDirectionArrows(on: style)
+                    rebuildArrows(on: map)
                     addEndpoints(on: map)
                 }
             }
             fitIfNeeded(on: map)
         }
 
-        /// 沿线方向箭头：自采样点 + 按线段方位角设 iconRotation，方向 100% 沿轨迹同向；空心 V 形。
-        private func addDirectionArrows(on style: MLNStyle) {
-            guard coords.count > 1 else { return }
+        private var arrowZoomBucket = -100
+
+        /// 方向箭头：方向用线段方位角(同向)，**密度随缩放变化**——约每 80 屏幕像素一个，
+        /// 放大→间隔变小→箭头变多。按整数缩放分桶，仅变化时重建。
+        private func rebuildArrows(on map: MLNMapView) {
+            guard parent.fitToTrack, coords.count > 1, let style = map.style else { return }
+            let zoom = map.zoomLevel
+            let bucket = Int(zoom.rounded())
+            if bucket == arrowZoomBucket { return }
+            arrowZoomBucket = bucket
+
+            if let l = style.layer(withIdentifier: "track-arrows") { style.removeLayer(l) }
+            if let s = style.source(withIdentifier: "track-arrows-src") { style.removeSource(s) }
             if style.image(forName: "trk-chevron") == nil {
                 style.setImage(Self.chevronImage(), forName: "trk-chevron")
             }
+
+            // 每像素米数 → 目标约每 80px 一个箭头（最小 40m，避免极近时过密）
+            let lat = coords[coords.count / 2].latitude
+            let mpp = 156543.03392 * cos(lat * .pi / 180) / pow(2.0, zoom)
+            let interval = max(40.0, mpp * 80)
+
             var feats: [MLNPointFeature] = []
-            var acc = 0.0, nextAt = 120.0          // 每 120m 放一个箭头
+            var acc = 0.0, nextAt = interval
             for i in 1..<coords.count {
                 let a = CLLocation(latitude: coords[i-1].latitude, longitude: coords[i-1].longitude)
                 let b = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
@@ -164,13 +181,13 @@ struct MapLibreView: UIViewRepresentable {
                 let brng = Self.bearing(from: coords[i-1], to: coords[i])
                 while acc + seg >= nextAt {
                     let t = (nextAt - acc) / seg
-                    let lat = coords[i-1].latitude + (coords[i].latitude - coords[i-1].latitude) * t
-                    let lon = coords[i-1].longitude + (coords[i].longitude - coords[i-1].longitude) * t
+                    let plat = coords[i-1].latitude + (coords[i].latitude - coords[i-1].latitude) * t
+                    let plon = coords[i-1].longitude + (coords[i].longitude - coords[i-1].longitude) * t
                     let f = MLNPointFeature()
-                    f.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                    f.coordinate = CLLocationCoordinate2D(latitude: plat, longitude: plon)
                     f.attributes = ["b": brng]
                     feats.append(f)
-                    nextAt += 120
+                    nextAt += interval
                 }
                 acc += seg
             }
