@@ -6,7 +6,12 @@ struct TrackDetailView: View {
     let trackId: UUID
     @State private var tab = 0       // 0 地图 / 1 详情
     @State private var track: Track?
+    @State private var points: [TrackPoint] = []
+    @State private var waypoints: [Waypoint] = []
     @State private var coords: [CLLocationCoordinate2D] = []
+    @State private var exportURL: URL?
+    @State private var showShare = false
+    @State private var exportError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,7 +26,7 @@ struct TrackDetailView: View {
             }
 
             HStack(spacing: 12) {
-                NavigationLink { /* TODO(5.5) 导出轨迹文件页 */ Text("导出轨迹文件（GPX）") } label: {
+                Button { exportGPX() } label: {
                     Text("导出").frame(maxWidth: .infinity).frame(height: 52)
                         .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColor.divider))
                 }
@@ -35,8 +40,26 @@ struct TrackDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             track = try? TrackRepository().track(id: trackId)
-            let pts = (try? TrackRepository().points(trackId: trackId)) ?? []
-            coords = pts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+            points = (try? TrackRepository().points(trackId: trackId)) ?? []
+            waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
+            coords = points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        }
+        .sheet(isPresented: $showShare) {
+            if let exportURL { ShareSheet(items: [exportURL]) }
+        }
+        .alert("导出失败", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button("好", role: .cancel) {}
+        } message: { Text(exportError ?? "") }
+    }
+
+    /// 导出 GPX（含航点）→ 系统分享面板（任务 5.5）。
+    private func exportGPX() {
+        guard let track else { return }
+        do {
+            exportURL = try GPXService().export(track: track, points: points, waypoints: waypoints)
+            showShare = true
+        } catch {
+            exportError = error.localizedDescription
         }
     }
 
