@@ -30,6 +30,62 @@ struct TrackRepository {
         }
     }
 
+    // MARK: - 记录中：增量落盘与会话（任务 3.8 崩溃恢复）
+
+    /// 开始记录时建一条空轨迹行，供后续增量落点。
+    func createInProgress(_ track: Track) throws {
+        try db.dbQueue.write { dbx in var t = track; try t.save(dbx) }
+    }
+
+    /// 批量追加轨迹点（点须已带正确 trackId/segment/seq）。
+    func appendPoints(_ points: [TrackPoint]) throws {
+        guard !points.isEmpty else { return }
+        try db.dbQueue.write { dbx in for var p in points { try p.insert(dbx) } }
+    }
+
+    /// 更新轨迹统计（记录中刷新 / 结算）。
+    func updateStats(id: UUID, distance: Double, movingTime: Double, totalTime: Double,
+                     ascent: Double, descent: Double, pointCount: Int) throws {
+        _ = try db.dbQueue.write { dbx in
+            try Track.filter(key: id.uuidString).updateAll(dbx,
+                Column("distance").set(to: distance),
+                Column("movingTime").set(to: movingTime),
+                Column("totalTime").set(to: totalTime),
+                Column("ascent").set(to: ascent),
+                Column("descent").set(to: descent),
+                Column("pointCount").set(to: pointCount),
+                Column("updatedAt").set(to: Date()))
+        }
+    }
+
+    func saveSession(_ session: RecordingSession) throws {
+        try db.dbQueue.write { dbx in var s = session; s.updatedAt = Date(); try s.save(dbx) }
+    }
+
+    /// 未结束的记录会话（启动时检测崩溃恢复）。
+    func activeSessions() throws -> [RecordingSession] {
+        try db.dbQueue.read { try RecordingSession.fetchAll($0) }
+    }
+
+    func deleteSession(id: UUID) throws {
+        _ = try db.dbQueue.write { dbx in try RecordingSession.filter(key: id.uuidString).deleteAll(dbx) }
+    }
+
+    /// 取某轨迹最后一个点（恢复时续 seq/segment）。
+    func lastPoint(trackId: UUID) throws -> TrackPoint? {
+        try db.dbQueue.read { dbx in
+            try TrackPoint
+                .filter(Column("trackId") == trackId.uuidString)
+                .order(Column("segment").desc, Column("seq").desc)
+                .fetchOne(dbx)
+        }
+    }
+
+    /// 物理删除轨迹（级联删点，丢弃恢复用）。
+    func hardDelete(id: UUID) throws {
+        _ = try db.dbQueue.write { dbx in try Track.filter(key: id.uuidString).deleteAll(dbx) }
+    }
+
     func points(trackId: UUID) throws -> [TrackPoint] {
         try db.dbQueue.read { dbx in
             try TrackPoint
