@@ -6,8 +6,10 @@ import SwiftUI
 struct MapControlsOverlay: View {
     @ObservedObject var controller: MapController
     @Binding var showKm: Bool
+    var showContours: Bool = false
     var onPlaceholder: (String) -> Void = { _ in }
     var onLayers: () -> Void = {}
+    var onContours: () -> Void = {}
 
     var body: some View {
         ZStack {
@@ -22,6 +24,7 @@ struct MapControlsOverlay: View {
                     zoomSlider
                     Spacer()
                     ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }
+                    ctrl("mountain.2", "等高线", active: showContours) { onContours() }
                 }
             }
             .padding(.trailing, 14).padding(.vertical, 16)

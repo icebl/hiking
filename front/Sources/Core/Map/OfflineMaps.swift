@@ -36,6 +36,13 @@ enum OfflineMaps {
         return dest
     }
 
+    /// 文件名含 "contour" 视为等高线包。
+    static func isContour(_ url: URL) -> Bool {
+        url.lastPathComponent.lowercased().contains("contour")
+    }
+    /// 第一个等高线包（开等高线时用）。
+    static func contourPack() -> URL? { list().first(where: isContour) }
+
     static func delete(_ url: URL) { try? FileManager.default.removeItem(at: url) }
 
     static func sizeMB(_ url: URL) -> Double {

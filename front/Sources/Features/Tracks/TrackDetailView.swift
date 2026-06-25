@@ -14,6 +14,7 @@ struct TrackDetailView: View {
     @State private var exportError: String?
     @StateObject private var mapCtrl = MapController()
     @State private var showKm = false
+    @State private var showContours = false
     @State private var toast: String?
     @State private var baseMode: MapBaseMode = .onlineRaster
     @State private var showLayerSheet = false
@@ -26,9 +27,11 @@ struct TrackDetailView: View {
             if tab == 0 {
                 ZStack {
                     MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
-                                 showsUserLocation: false, fitToTrack: true, showKmMarkers: showKm)
-                    MapControlsOverlay(controller: mapCtrl, showKm: $showKm,
-                                       onPlaceholder: showToast, onLayers: { showLayerSheet = true })
+                                 showsUserLocation: false, fitToTrack: true, showKmMarkers: showKm,
+                                 showContours: showContours, contourPath: OfflineMaps.contourPack()?.path)
+                    MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
+                                       onPlaceholder: showToast, onLayers: { showLayerSheet = true },
+                                       onContours: { toggleContours() })
                     if let toast {
                         VStack {
                             Spacer()
@@ -103,6 +106,10 @@ struct TrackDetailView: View {
                 // TODO(5.6): 海拔剖面图（点击联动地图）
             }
         }
+    }
+    private func toggleContours() {
+        if OfflineMaps.contourPack() == nil { showToast("未导入等高线包（我的 → 离线地图 导入 *contour*.pmtiles）") }
+        else { showContours.toggle() }
     }
     private func showToast(_ msg: String) {
         toast = msg

@@ -19,6 +19,9 @@ struct MapLibreView: UIViewRepresentable {
     var fitToTrack: Bool = false
     /// true 时：轨迹上每 1km 显示里程碑（公里标）
     var showKmMarkers: Bool = false
+    /// 等高线（任务 2.5）：开关 + 等高线包本地路径（叠在任何底图之上）
+    var showContours: Bool = false
+    var contourPath: String? = nil
     /// 点击地图回调（取经纬度，任务 2.8）
     var onTap: ((CLLocationCoordinate2D) -> Void)? = nil
 
@@ -63,6 +66,7 @@ struct MapLibreView: UIViewRepresentable {
         }
         coord.drawTrack(on: map)
         coord.updateKmMarkers(on: map, show: showKmMarkers)
+        coord.updateContours(on: map)
     }
 
     /// 按底图模式返回 styleURL：在线=空 style(随后加栅格)，离线=矢量 PMTiles 样式。
@@ -115,6 +119,7 @@ struct MapLibreView: UIViewRepresentable {
             }
             // 离线矢量底图：样式 JSON 已含矢量源/层，无需在此添加
             drawTrack(on: mapView)
+            updateContours(on: mapView)     // 等高线叠加（样式重载后重建）
             parent.controller?.zoom = mapView.zoomLevel
         }
 
@@ -275,6 +280,41 @@ struct MapLibreView: UIViewRepresentable {
                 guard !kmAnnotations.isEmpty else { return }
                 map.removeAnnotations(kmAnnotations)
                 kmAnnotations = []
+            }
+        }
+
+        /// 等高线叠加层（任务 2.5）：青色细线 + 计曲线(idx==1)加粗；叠在底图之上、轨迹之下。
+        func updateContours(on map: MLNMapView) {
+            guard let style = map.style else { return }
+            let srcId = "contour-src", lineId = "contour-line", idxId = "contour-index"
+            for id in [idxId, lineId] { if let l = style.layer(withIdentifier: id) { style.removeLayer(l) } }
+            if let s = style.source(withIdentifier: srcId) { style.removeSource(s) }
+            guard parent.showContours, let path = parent.contourPath,
+                  let url = URL(string: "pmtiles://\(URL(fileURLWithPath: path).absoluteString)") else { return }
+
+            let src = MLNVectorTileSource(identifier: srcId, configurationURL: url)
+            style.addSource(src)
+
+            let line = MLNLineStyleLayer(identifier: lineId, source: src)
+            line.sourceLayerIdentifier = "contour"
+            line.lineColor = NSExpression(forConstantValue: UIColor(red: 0.21, green: 0.77, blue: 0.75, alpha: 1)) // #36C5C0
+            line.lineWidth = NSExpression(forConstantValue: 0.9)
+            line.lineOpacity = NSExpression(forConstantValue: 0.7)
+            line.minimumZoomLevel = 12
+
+            let idx = MLNLineStyleLayer(identifier: idxId, source: src)
+            idx.sourceLayerIdentifier = "contour"
+            idx.predicate = NSPredicate(format: "idx == 1")
+            idx.lineColor = NSExpression(forConstantValue: UIColor(red: 0.18, green: 0.66, blue: 0.64, alpha: 1)) // #2FA8A3
+            idx.lineWidth = NSExpression(forConstantValue: 1.7)
+            idx.lineOpacity = NSExpression(forConstantValue: 0.85)
+            idx.minimumZoomLevel = 11
+
+            if let track = style.layer(withIdentifier: "track-line") {   // 等高线在红轨迹之下
+                style.insertLayer(line, below: track)
+                style.insertLayer(idx, below: track)
+            } else {
+                style.addLayer(line); style.addLayer(idx)
             }
         }
 

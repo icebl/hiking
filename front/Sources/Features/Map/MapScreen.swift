@@ -11,12 +11,14 @@ struct MapScreen: View {
     @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1）
     @State private var showKm = false           // 公里标开关
+    @State private var showContours = false      // 等高线开关
     @State private var baseMode: MapBaseMode = .onlineRaster
     @State private var showLayerSheet = false
 
     var body: some View {
         ZStack {
             MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
+                         showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                          onTap: { c in tapped = CoordFormatter.string(c, format: AppSettings.coordFormat) })
                 .ignoresSafeArea()
 
@@ -54,6 +56,7 @@ struct MapScreen: View {
                     zoomSlider                                 // 滑块缩放（已接 mapCtrl）
                     Spacer()
                     ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }  // 有轨迹时每1km里程碑
+                    ctrl("mountain.2", "等高线", active: showContours) { toggleContours() }
                 }
             }
             .padding(.trailing, 14)
@@ -106,6 +109,14 @@ struct MapScreen: View {
     }
 
     // MARK: - 子组件
+
+    private func toggleContours() {
+        if OfflineMaps.contourPack() == nil {
+            tapped = "未导入等高线包（我的 → 离线地图 导入 *contour*.pmtiles）"
+        } else {
+            showContours.toggle()
+        }
+    }
 
     private var infoBar: some View {
         (Text("WGS84").foregroundColor(Color(hex: 0x7EE0A6)).fontWeight(.bold)
