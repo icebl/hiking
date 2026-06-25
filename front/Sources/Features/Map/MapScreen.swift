@@ -16,9 +16,10 @@ struct MapScreen: View {
             MapLibreView(controller: mapCtrl)
                 .ignoresSafeArea()
 
-            // 信息条：靠上居中（WGS84 浅绿高亮）
-            VStack {
+            // 信息条：靠上居中（WGS84 浅绿高亮）+ 缩放级别读数（诊断）
+            VStack(spacing: 6) {
                 infoBar
+                zoomReadout
                 Spacer()
             }
             .padding(.top, 6)
@@ -96,10 +97,18 @@ struct MapScreen: View {
 
     private var infoBar: some View {
         (Text("WGS84").foregroundColor(Color(hex: 0x7EE0A6)).fontWeight(.bold)
-         + Text(" 41.6950°N 123.3443°E · 海拔39m · 定位误差22m").foregroundColor(.white))
+         + Text(" 41.6950°N 123.3443°E · 海拔39m").foregroundColor(.white))
             .font(.system(size: 11.5, weight: .medium))
             .padding(.vertical, 6).padding(.horizontal, 14)
             .background(Color.black.opacity(0.72)).cornerRadius(12)
+    }
+
+    /// 缩放级别读数（诊断：能看到当前在哪一级；后续可移除）
+    private var zoomReadout: some View {
+        Text(String(format: "缩放 z%.1f", mapCtrl.zoom))
+            .font(.system(size: 11, weight: .medium)).foregroundColor(.white)
+            .padding(.vertical, 3).padding(.horizontal, 10)
+            .background(Color.black.opacity(0.6)).cornerRadius(10)
     }
 
     /// 缩放 +/- 竖排药丸

@@ -6,6 +6,9 @@ import MapLibre
 final class MapController: ObservableObject {
     weak var mapView: MLNMapView?
 
+    /// 当前地图缩放级别（诊断/读数用，由 MapLibreView 在地图变动时回填）。
+    @Published var zoom: Double = 0
+
     var minZoom: Double = 1
     var maxZoom: Double = 18
 
