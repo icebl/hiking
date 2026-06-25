@@ -10,10 +10,11 @@ struct MapScreen: View {
     @State private var showRecording = false
     @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1）
+    @State private var showKm = false           // 公里标开关
 
     var body: some View {
         ZStack {
-            MapLibreView(controller: mapCtrl)
+            MapLibreView(controller: mapCtrl, showKmMarkers: showKm)
                 .ignoresSafeArea()
 
             // 信息条：靠上居中（WGS84 浅绿高亮）+ 缩放级别读数（诊断）
@@ -49,7 +50,7 @@ struct MapScreen: View {
                     zoomGroup                                  // 缩放 +/-（已接 mapCtrl）
                     zoomSlider                                 // 滑块缩放（已接 mapCtrl）
                     Spacer()
-                    ctrl("ruler", "公里标")                    // TODO(2.3): 每 1KM 里程标
+                    ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }  // 有轨迹时每1km里程碑
                 }
             }
             .padding(.trailing, 14)
@@ -157,14 +158,14 @@ struct MapScreen: View {
         }
     }
 
-    /// 悬浮圆形控件（可带下方小标签），filled 用于实心图标
+    /// 悬浮圆形控件（可带下方小标签），filled 用于实心图标，active 高亮（如公里标开启）
     private func ctrl(_ icon: String, _ label: String? = nil, filled: Bool = false,
-                      action: @escaping () -> Void = {}) -> some View {
+                      active: Bool = false, action: @escaping () -> Void = {}) -> some View {
         VStack(spacing: 3) {
             Button(action: action) {
                 Image(systemName: icon)
                     .font(.system(size: 18, weight: filled ? .semibold : .regular))
-                    .foregroundColor(AppColor.ink)
+                    .foregroundColor(active ? AppColor.primary : AppColor.ink)
                     .frame(width: 44, height: 44)
                     .background(Color.white).clipShape(Circle())
                     .shadow(color: .black.opacity(0.18), radius: 4, y: 2)

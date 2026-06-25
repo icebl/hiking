@@ -92,6 +92,7 @@ struct MapLibreView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, viewFor annotation: MLNAnnotation) -> MLNAnnotationView? {
             if annotation is MLNUserLocation { return HeadingUserLocationView() }
             if let e = annotation as? EndpointAnnotation { return EndpointMarkerView(isStart: e.isStart) }
+            if let k = annotation as? KmAnnotation { return KmMarkerView(km: k.km) }
             return nil
         }
 
@@ -188,44 +189,39 @@ struct MapLibreView: UIViewRepresentable {
             return (deg + 360).truncatingRemainder(dividingBy: 360)
         }
 
-        /// 公里标：每 1km 一个里程碑（开关）。
-        func updateKmMarkers(on map: MLNMapView, show: Bool) {
-            guard let style = map.style else { return }
-            let srcId = "km-markers", layerId = "km-markers-layer"
-            if let l = style.layer(withIdentifier: layerId) { style.removeLayer(l) }
-            if let s = style.source(withIdentifier: srcId) { style.removeSource(s) }
-            guard show, coords.count > 1 else { return }
+        private var kmAnnotations: [MLNAnnotation] = []
 
-            var feats: [MLNPointFeature] = []
-            var acc = 0.0
-            var nextKm = 1.0
-            for i in 1..<coords.count {
-                let a = CLLocation(latitude: coords[i-1].latitude, longitude: coords[i-1].longitude)
-                let b = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
-                let seg = b.distance(from: a)
-                while acc + seg >= nextKm * 1000 {
-                    let t = (nextKm * 1000 - acc) / seg
-                    let lat = coords[i-1].latitude + (coords[i].latitude - coords[i-1].latitude) * t
-                    let lon = coords[i-1].longitude + (coords[i].longitude - coords[i-1].longitude) * t
-                    let f = MLNPointFeature()
-                    f.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-                    f.attributes = ["label": String(format: "%.0f", nextKm)]
-                    feats.append(f)
-                    nextKm += 1
+        /// 公里标：每 1km 一个里程碑（深色圆+白数字）。用标注视图（不依赖字体 glyphs）。开关。
+        func updateKmMarkers(on map: MLNMapView, show: Bool) {
+            if show {
+                guard kmAnnotations.isEmpty, coords.count > 1 else { return }   // 已显示则不重复添加
+                var anns: [MLNAnnotation] = []
+                var acc = 0.0, nextKm = 1.0
+                for i in 1..<coords.count {
+                    let a = CLLocation(latitude: coords[i-1].latitude, longitude: coords[i-1].longitude)
+                    let b = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
+                    let seg = b.distance(from: a)
+                    guard seg > 0 else { continue }
+                    while acc + seg >= nextKm * 1000 {
+                        let t = (nextKm * 1000 - acc) / seg
+                        let lat = coords[i-1].latitude + (coords[i].latitude - coords[i-1].latitude) * t
+                        let lon = coords[i-1].longitude + (coords[i].longitude - coords[i-1].longitude) * t
+                        let m = KmAnnotation()
+                        m.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                        m.km = Int(nextKm)
+                        anns.append(m)
+                        nextKm += 1
+                    }
+                    acc += seg
                 }
-                acc += seg
+                guard !anns.isEmpty else { return }
+                map.addAnnotations(anns)
+                kmAnnotations = anns
+            } else {
+                guard !kmAnnotations.isEmpty else { return }
+                map.removeAnnotations(kmAnnotations)
+                kmAnnotations = []
             }
-            guard !feats.isEmpty else { return }
-            let src = MLNShapeSource(identifier: srcId, features: feats, options: nil)
-            style.addSource(src)
-            let layer = MLNSymbolStyleLayer(identifier: layerId, source: src)
-            layer.text = NSExpression(forKeyPath: "label")
-            layer.textColor = NSExpression(forConstantValue: UIColor.white)
-            layer.textHaloColor = NSExpression(forConstantValue: UIColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1))
-            layer.textHaloWidth = NSExpression(forConstantValue: 2)
-            layer.textFontSize = NSExpression(forConstantValue: 12)
-            layer.textAllowsOverlap = NSExpression(forConstantValue: true)
-            style.addLayer(layer)
         }
 
         /// 有轨迹时把相机框到轨迹范围（仅一次，详情/导航用）。不依赖 controller。
@@ -321,6 +317,30 @@ final class HeadingUserLocationView: MLNUserLocationAnnotationView {
 /// 起终点标注数据：isStart 区分起(绿“起”)/终(红“终”)。
 final class EndpointAnnotation: MLNPointAnnotation {
     var isStart = true
+}
+
+/// 公里标标注数据：km = 第几公里。
+final class KmAnnotation: MLNPointAnnotation {
+    var km = 0
+}
+
+/// 公里标视图：深色圆 + 白色公里数（参照图26）。
+final class KmMarkerView: MLNAnnotationView {
+    init(km: Int) {
+        super.init(reuseIdentifier: "km-\(km)")
+        frame = CGRect(x: 0, y: 0, width: 22, height: 22)
+        layer.backgroundColor = UIColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 0.92).cgColor
+        layer.cornerRadius = 11
+        layer.borderColor = UIColor.white.cgColor
+        layer.borderWidth = 1.5
+        let label = UILabel(frame: bounds)
+        label.text = "\(km)"
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 12, weight: .bold)
+        label.textAlignment = .center
+        addSubview(label)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
 /// 起终点标注视图：圆形底 + 白色“起/终”文字。
