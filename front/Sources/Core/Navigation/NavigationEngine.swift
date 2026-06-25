@@ -9,6 +9,34 @@ final class NavigationEngine {
         let cumulativeDistance: [Double]   // 预计算逐点累计距离（任务 4.2）
         let totalDistance: Double
         let cumulativeAscent: [Double]
+        var totalAscent: Double { cumulativeAscent.last ?? 0 }
+    }
+
+    /// 由轨迹点构建计划线（任务 4.2）：累计距离/爬升预计算；reverse 反向导航。
+    static func buildLine(points: [TrackPoint], reverse: Bool) -> PlannedLine {
+        let ordered = reverse ? Array(points.reversed()) : points
+        let coords = ordered.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        var cumDist: [Double] = []
+        var cumAsc: [Double] = []
+        var dAcc = 0.0, aAcc = 0.0
+        var prev: CLLocation?
+        var lastEle: Double?
+        let ascentThreshold = 5.0
+        for p in ordered {
+            let loc = CLLocation(latitude: p.lat, longitude: p.lon)
+            if let prev { dAcc += loc.distance(from: prev) }
+            prev = loc
+            if let e = p.elevation {
+                if let le = lastEle, abs(e - le) >= ascentThreshold {
+                    if e > le { aAcc += e - le }
+                    lastEle = e
+                } else if lastEle == nil { lastEle = e }
+            }
+            cumDist.append(dAcc)
+            cumAsc.append(aAcc)
+        }
+        return PlannedLine(points: coords, cumulativeDistance: cumDist,
+                           totalDistance: dAcc, cumulativeAscent: cumAsc)
     }
 
     // 偏航阈值（任务 4.3，默认 25m，可在设置覆盖；滞回解除 15m）
@@ -17,7 +45,7 @@ final class NavigationEngine {
     var offRouteSustainSeconds: TimeInterval = 10
 
     private(set) var isOffRoute = false
-    private var lastMatchedIndex = 0           // 单调推进窗口，处理自交/之字形（任务 4.3）
+    private(set) var lastMatchedIndex = 0      // 单调推进窗口，处理自交/之字形（任务 4.3）
     private var offRouteSince: Date?
 
     /// 输入当前位置，返回到计划线的距离与是否偏航。
