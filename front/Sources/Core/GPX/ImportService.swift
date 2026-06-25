@@ -14,12 +14,21 @@ enum ImportService {
     }
 
     /// 解析文件（自动按扩展名分派）。返回多条轨迹（多 trk/Placemark 全导入）。
+    /// 显示名统一用文件名（用户在微信/文件里看到的名字，确保可识别回显）；多条加序号。
     static func parse(url: URL) throws -> [GPXService.ParsedTrack] {
+        var tracks: [GPXService.ParsedTrack]
         switch url.pathExtension.lowercased() {
-        case "gpx": return try GPXService().parse(url: url)
-        case "kml": return try KMLService().parse(url: url)
+        case "gpx": tracks = try GPXService().parse(url: url)
+        case "kml": tracks = try KMLService().parse(url: url)
         default:    throw ImportError.unsupported(url.pathExtension.lowercased())
         }
+        let base = url.deletingPathExtension().lastPathComponent
+        if !base.isEmpty {
+            for i in tracks.indices {
+                tracks[i].name = tracks.count > 1 ? "\(base) (\(i + 1))" : base
+            }
+        }
+        return tracks
     }
 
     /// 把一条解析结果结算为 Track（计算距离/爬升/海拔区间）并写入数据库。

@@ -146,20 +146,20 @@ struct MapLibreView: UIViewRepresentable {
             style.addLayer(layer)
         }
 
-        /// 起点绿圈 / 终点红圈。
+        /// 起点绿圈 / 终点红圈（两个常量色圆层，避免表达式风险）。
         private func addEndpoints(on style: MLNStyle) {
             guard let first = coords.first, let last = coords.last else { return }
-            let start = MLNPointFeature(); start.coordinate = first; start.attributes = ["role": "start"]
-            let end = MLNPointFeature(); end.coordinate = last; end.attributes = ["role": "end"]
-            let src = MLNShapeSource(identifier: "track-ends",
-                                     features: [start, end], options: nil)
+            addEndCircle(on: style, id: "track-start", coord: first,
+                         color: UIColor(red: 0.12, green: 0.62, blue: 0.33, alpha: 1))  // #1F9D55 绿
+            addEndCircle(on: style, id: "track-end", coord: last,
+                         color: UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1))    // #FF3B30 红
+        }
+        private func addEndCircle(on style: MLNStyle, id: String, coord: CLLocationCoordinate2D, color: UIColor) {
+            let f = MLNPointFeature(); f.coordinate = coord
+            let src = MLNShapeSource(identifier: id, shape: f, options: nil)
             style.addSource(src)
-            let layer = MLNCircleStyleLayer(identifier: "track-ends-layer", source: src)
-            layer.circleColor = NSExpression(
-                format: "MGL_MATCH(role, 'start', %@, 'end', %@, %@)",
-                UIColor(red: 0.12, green: 0.62, blue: 0.33, alpha: 1),   // #1F9D55 绿
-                UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1),    // #FF3B30 红
-                UIColor.gray)
+            let layer = MLNCircleStyleLayer(identifier: id + "-layer", source: src)
+            layer.circleColor = NSExpression(forConstantValue: color)
             layer.circleRadius = NSExpression(forConstantValue: 8)
             layer.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
             layer.circleStrokeWidth = NSExpression(forConstantValue: 2)
@@ -209,6 +209,8 @@ struct MapLibreView: UIViewRepresentable {
         /// 有轨迹时把相机框到轨迹范围（仅一次，详情/导航用）。不依赖 controller。
         private func fitIfNeeded(on map: MLNMapView) {
             guard parent.fitToTrack, !didFit, coords.count > 1 else { return }
+            // 地图尺寸为 0 时调用 setVisibleCoordinateBounds 会算出 NaN 相机而崩溃；不满足则不置 didFit，稍后重试
+            guard map.bounds.width > 10, map.bounds.height > 10 else { return }
             var minLat = coords[0].latitude, maxLat = coords[0].latitude
             var minLon = coords[0].longitude, maxLon = coords[0].longitude
             for c in coords {

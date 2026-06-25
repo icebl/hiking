@@ -24,6 +24,7 @@ final class MapController: ObservableObject {
     /// 把相机框到轨迹范围（含边距）。
     func fitTrack(animated: Bool = true) {
         guard let m = mapView, fitCoords.count > 1 else { return }
+        guard m.bounds.width > 10, m.bounds.height > 10 else { return }  // 防零尺寸算出 NaN 相机崩溃
         var minLat = fitCoords[0].latitude, maxLat = fitCoords[0].latitude
         var minLon = fitCoords[0].longitude, maxLon = fitCoords[0].longitude
         for c in fitCoords {
