@@ -5,6 +5,7 @@ front/DerivedData/
 front/Payload/
 front/*.ipa
 **/.DS_Store
+ipa/
 
 # 依赖缓存
 **/.swiftpm

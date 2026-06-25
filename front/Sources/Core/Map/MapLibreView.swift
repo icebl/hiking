@@ -12,8 +12,11 @@ struct MapLibreView: UIViewRepresentable {
     var trackCoordinates: [CLLocationCoordinate2D] = []
     var showsUserLocation: Bool = true
 
-    /// 在线栅格底图模板（单常量便于切换到 T_Google 等）。上线/离线仍走自建底图。
-    var rasterTileURLTemplate: String = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    /// 在线栅格底图模板（单常量便于切换）。上线/离线仍走自建底图。
+    /// 说明：OSM 公共瓦片(`tile.openstreetmap.org`)对 UA 有策略限制，MapLibre iOS 默认 UA 常被拒(403/418)→白图；
+    /// 这里改用 ESRI 世界地形图（无 Key、iOS 可靠、{z}/{y}/{x} 顺序）。
+    /// 备选卫星：https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}
+    var rasterTileURLTemplate: String = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
     var initialCenter = CLLocationCoordinate2D(latitude: 41.80, longitude: 123.43)  // 默认沈阳
     var initialZoom: Double = 11
 
