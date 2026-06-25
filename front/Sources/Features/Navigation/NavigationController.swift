@@ -33,6 +33,9 @@ final class NavigationController: ObservableObject {
 
         if alsoRecord { recorder.start(); isRecording = true }
 
+        engine.offRouteThreshold = AppSettings.offRouteThreshold          // 读设置：偏航阈值
+        engine.clearThreshold = max(5, AppSettings.offRouteThreshold - 10) // 滞回解除阈值
+
         let pts = (try? TrackRepository().points(trackId: trackId)) ?? []
         let l = NavigationEngine.buildLine(points: pts, reverse: reverse)
         line = l

@@ -16,6 +16,8 @@ struct MapLibreView: UIViewRepresentable {
     var fitToTrack: Bool = false
     /// true 时：轨迹上每 1km 显示里程碑（公里标）
     var showKmMarkers: Bool = false
+    /// 点击地图回调（取经纬度，任务 2.8）
+    var onTap: ((CLLocationCoordinate2D) -> Void)? = nil
 
     /// 在线栅格底图模板（单常量便于切换）。上线/离线仍走自建底图。
     /// 说明：OSM 公共瓦片对 UA 有策略限制→白图；ESRI 世界地形图(World_Topo_Map)在中国区高层级(~z16+)无缓存，
@@ -38,6 +40,11 @@ struct MapLibreView: UIViewRepresentable {
         map.logoView.isHidden = true
         map.attributionButton.isHidden = true         // 隐藏版权(i)按钮（遮挡操作；发布前在“关于”补署名）
         map.setCenter(initialCenter, zoomLevel: initialZoom, animated: false)
+        if onTap != nil {
+            let tap = UITapGestureRecognizer(target: context.coordinator,
+                                             action: #selector(Coordinator.handleTap(_:)))
+            map.addGestureRecognizer(tap)
+        }
         controller?.mapView = map
         return map
     }
@@ -99,6 +106,13 @@ struct MapLibreView: UIViewRepresentable {
         // 跟随模式变化（用户拖动会打断 .follow）→ 同步定位键高亮
         func mapView(_ mapView: MLNMapView, didChange mode: MLNUserTrackingMode, animated: Bool) {
             parent.controller?.syncTrackingMode(mode)
+        }
+
+        // 点击地图取经纬度（任务 2.8）
+        @objc func handleTap(_ g: UITapGestureRecognizer) {
+            guard let map = g.view as? MLNMapView else { return }
+            let coord = map.convert(g.location(in: map), toCoordinateFrom: map)
+            parent.onTap?(coord)
         }
 
         // 缩放级别读数回填（任务诊断用）

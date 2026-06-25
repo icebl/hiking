@@ -34,7 +34,8 @@ final class RecordingController: ObservableObject {
 
     // 去噪/采样参数（任务 3.3 / 3.6）
     private let minAccuracy: CLLocationDistance = 30   // 精度差于此丢弃
-    private let minMove: CLLocationDistance = 5        // 最小位移 5m
+    private var minMove: CLLocationDistance = 5        // 最小位移（设置页可改）
+    private var autoPauseEnabled = true                // 静止自动暂停（设置页开关）
     private let ascentThreshold: Double = 5            // 爬升去噪 5m
     private let flushEvery = 10                        // 每 N 点落盘一次
     private let gapSeconds: TimeInterval = 60          // 间隔超此判为断段
@@ -134,7 +135,9 @@ final class RecordingController: ObservableObject {
     private func beginSensors() {
         state = .recording
         lastMoveAt = Date()
-        altimeter.start()
+        minMove = AppSettings.minMove                  // 读设置
+        autoPauseEnabled = AppSettings.autoPause
+        if AppSettings.useBarometer { altimeter.start() }  // 仅 GPS 时不启气压计
         location.start(background: true)
         location.$location.compactMap { $0 }.sink { [weak self] in self?.ingest($0) }.store(in: &cancellables)
         startTimer()
@@ -148,7 +151,7 @@ final class RecordingController: ObservableObject {
     /// 1s 计时：运动用时累加 + 静止自动暂停判定（任务 3.5 / 3.7）。
     private func tick() {
         guard state == .recording else { return }
-        if Date().timeIntervalSince(lastMoveAt) > autoPauseSeconds { isAutoPaused = true }
+        if autoPauseEnabled, Date().timeIntervalSince(lastMoveAt) > autoPauseSeconds { isAutoPaused = true }
         if !isAutoPaused { movingTime += 1 }
     }
 

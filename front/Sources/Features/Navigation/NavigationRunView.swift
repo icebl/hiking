@@ -7,7 +7,7 @@ struct NavigationRunView: View {
     @StateObject private var ctrl = NavigationController()
     @State private var started = false
     @State private var reverse = false
-    @State private var alsoRecord = true            // 导航同时记录实走（默认开）
+    @State private var alsoRecord = AppSettings.recordWhileNav   // 导航同时记录实走（默认取设置）
     @State private var showSaveDialog = false
 
     var body: some View {

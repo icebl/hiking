@@ -14,7 +14,8 @@ struct MapScreen: View {
 
     var body: some View {
         ZStack {
-            MapLibreView(controller: mapCtrl, showKmMarkers: showKm)
+            MapLibreView(controller: mapCtrl, showKmMarkers: showKm,
+                         onTap: { c in tapped = CoordFormatter.string(c, format: AppSettings.coordFormat) })
                 .ignoresSafeArea()
 
             // 信息条：靠上居中（WGS84 浅绿高亮）+ 缩放级别读数（诊断）
