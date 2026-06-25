@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MapLibre
 import CoreLocation
 
@@ -81,6 +82,12 @@ struct MapLibreView: UIViewRepresentable {
             parent.controller?.zoom = mapView.zoomLevel
         }
 
+        // 自定义用户位置标注：更大更长的朝向箭头（随手机方向旋转）
+        func mapView(_ mapView: MLNMapView, viewFor annotation: MLNAnnotation) -> MLNAnnotationView? {
+            guard annotation is MLNUserLocation else { return nil }
+            return HeadingUserLocationView()
+        }
+
         // 缩放级别读数回填（任务诊断用）
         func mapViewRegionIsChanging(_ mapView: MLNMapView) {
             parent.controller?.zoom = mapView.zoomLevel
@@ -107,5 +114,56 @@ struct MapLibreView: UIViewRepresentable {
                 trackSource = src
             }
         }
+    }
+}
+
+/// 自定义用户位置视图：白边蓝点 + 更大更长的朝向箭头（heading 旋转）。
+final class HeadingUserLocationView: MLNUserLocationAnnotationView {
+    private let arrow = CAShapeLayer()
+    private let dot = CALayer()
+    private var built = false
+
+    private static let blue = UIColor(red: 0.12, green: 0.49, blue: 1.0, alpha: 1)
+
+    override func update() {
+        if frame.isNull {                 // 首次：给定尺寸后等下一帧布局
+            frame = CGRect(x: 0, y: 0, width: 64, height: 64)
+            return setNeedsLayout()
+        }
+        if !built { build(); built = true }
+        // 朝向旋转（trueHeading 优先；无则不转）
+        if let heading = userLocation?.heading?.trueHeading, heading >= 0 {
+            arrow.setAffineTransform(CGAffineTransform(rotationAngle: CGFloat(heading * .pi / 180)))
+        }
+    }
+
+    private func build() {
+        let c = CGPoint(x: bounds.midX, y: bounds.midY)
+
+        // 箭头：以中心为旋转锚点，尖端在中心上方（更长 = 距中心更远）
+        let w: CGFloat = 22, len: CGFloat = 30, baseGap: CGFloat = 6
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: c.x, y: c.y - len))            // 尖端
+        path.addLine(to: CGPoint(x: c.x - w / 2, y: c.y - baseGap))
+        path.addLine(to: CGPoint(x: c.x, y: c.y - baseGap * 2.2))
+        path.addLine(to: CGPoint(x: c.x + w / 2, y: c.y - baseGap))
+        path.close()
+        arrow.path = path.cgPath
+        arrow.fillColor = Self.blue.cgColor
+        arrow.frame = bounds
+        arrow.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        arrow.position = c
+        arrow.shadowColor = UIColor.black.cgColor
+        arrow.shadowOpacity = 0.25; arrow.shadowRadius = 2; arrow.shadowOffset = .zero
+        layer.addSublayer(arrow)
+
+        // 中心圆点（白边）
+        let r: CGFloat = 9
+        dot.frame = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
+        dot.cornerRadius = r
+        dot.backgroundColor = Self.blue.cgColor
+        dot.borderColor = UIColor.white.cgColor
+        dot.borderWidth = 3
+        layer.addSublayer(dot)
     }
 }

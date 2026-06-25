@@ -52,11 +52,25 @@ targets:
           - location
         # —— 气压计海拔 ——
         NSMotionUsageDescription: 使用气压计获取更稳定的海拔数据。
-        # —— 文件导入（GPX）——
+        # —— 文件导入：声明“本 App 能打开”这些类型（微信/系统“用本应用打开”出现入口）——
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: 轨迹文件
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.topografix.gpx
+              - com.google.earth.kml
+        # —— 类型声明（GPX / KML）——
         UTImportedTypeDeclarations:
           - UTTypeIdentifier: com.topografix.gpx
             UTTypeConformsTo: [public.xml]
             UTTypeTagSpecification:
               public.filename-extension: [gpx]
+          - UTTypeIdentifier: com.google.earth.kml
+            UTTypeConformsTo: [public.xml]
+            UTTypeDescription: KML 轨迹
+            UTTypeTagSpecification:
+              public.filename-extension: [kml]
+              public.mime-type: [application/vnd.google-earth.kml+xml]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

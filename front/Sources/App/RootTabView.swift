@@ -5,6 +5,7 @@ import SwiftUI
 struct RootTabView: View {
     @State private var selection = 0
     @State private var showMap = false
+    @StateObject private var importer = ImportCoordinator.shared
 
     var body: some View {
         TabView(selection: $selection) {
@@ -31,6 +32,14 @@ struct RootTabView: View {
         }
         .fullScreenCover(isPresented: $showMap) {
             MapScreen()
+        }
+        // 微信/系统“用本应用打开” → 接收文件 → 导入预览
+        .onOpenURL { importer.pendingURL = $0 }
+        .sheet(isPresented: Binding(
+            get: { importer.pendingURL != nil },
+            set: { if !$0 { importer.pendingURL = nil } }
+        )) {
+            NavigationStack { ImportPreviewView(fileURL: importer.pendingURL) }
         }
     }
 }
