@@ -88,10 +88,11 @@ struct MapLibreView: UIViewRepresentable {
             parent.controller?.zoom = mapView.zoomLevel
         }
 
-        // 自定义用户位置标注：更大更长的朝向箭头（随手机方向旋转）
+        // 自定义标注：用户位置朝向箭头 / 起终点（圆 + 起·终 文字）
         func mapView(_ mapView: MLNMapView, viewFor annotation: MLNAnnotation) -> MLNAnnotationView? {
-            guard annotation is MLNUserLocation else { return nil }
-            return HeadingUserLocationView()
+            if annotation is MLNUserLocation { return HeadingUserLocationView() }
+            if let e = annotation as? EndpointAnnotation { return EndpointMarkerView(isStart: e.isStart) }
+            return nil
         }
 
         // 跟随模式变化（用户拖动会打断 .follow）→ 同步定位键高亮
@@ -125,45 +126,66 @@ struct MapLibreView: UIViewRepresentable {
                 style.addLayer(layer)
                 trackSource = src
                 if parent.fitToTrack {           // 仅完整/计划轨迹（详情、导航）画起终点+箭头；记录中的实时线不画
-                    addDirectionArrows(on: style, lineSource: src)
-                    addEndpoints(on: style)
+                    addDirectionArrows(on: style)
+                    addEndpoints(on: map)
                 }
             }
             fitIfNeeded(on: map)
         }
 
-        /// 沿线方向箭头：注册白色箭头图，符号层沿线方向重复排布。
-        private func addDirectionArrows(on style: MLNStyle, lineSource: MLNShapeSource) {
-            if style.image(forName: "trk-arrow") == nil {
-                style.setImage(Self.arrowImage(), forName: "trk-arrow")
+        /// 沿线方向箭头：自采样点 + 按线段方位角设 iconRotation，方向 100% 沿轨迹同向；空心 V 形。
+        private func addDirectionArrows(on style: MLNStyle) {
+            guard coords.count > 1 else { return }
+            if style.image(forName: "trk-chevron") == nil {
+                style.setImage(Self.chevronImage(), forName: "trk-chevron")
             }
-            let layer = MLNSymbolStyleLayer(identifier: "track-arrows", source: lineSource)
-            layer.iconImageName = NSExpression(forConstantValue: "trk-arrow")
-            layer.symbolPlacement = NSExpression(forConstantValue: "line")
-            layer.symbolSpacing = NSExpression(forConstantValue: 90)
-            layer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            var feats: [MLNPointFeature] = []
+            var acc = 0.0, nextAt = 120.0          // 每 120m 放一个箭头
+            for i in 1..<coords.count {
+                let a = CLLocation(latitude: coords[i-1].latitude, longitude: coords[i-1].longitude)
+                let b = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
+                let seg = b.distance(from: a)
+                guard seg > 0 else { continue }
+                let brng = Self.bearing(from: coords[i-1], to: coords[i])
+                while acc + seg >= nextAt {
+                    let t = (nextAt - acc) / seg
+                    let lat = coords[i-1].latitude + (coords[i].latitude - coords[i-1].latitude) * t
+                    let lon = coords[i-1].longitude + (coords[i].longitude - coords[i-1].longitude) * t
+                    let f = MLNPointFeature()
+                    f.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                    f.attributes = ["b": brng]
+                    feats.append(f)
+                    nextAt += 120
+                }
+                acc += seg
+            }
+            guard !feats.isEmpty else { return }
+            let src = MLNShapeSource(identifier: "track-arrows-src", features: feats, options: nil)
+            style.addSource(src)
+            let layer = MLNSymbolStyleLayer(identifier: "track-arrows", source: src)
+            layer.iconImageName = NSExpression(forConstantValue: "trk-chevron")
+            layer.iconRotation = NSExpression(forKeyPath: "b")        // 按方位角旋转（朝上图标旋到行进方向）
             layer.iconRotationAlignment = NSExpression(forConstantValue: "map")
+            layer.iconAllowsOverlap = NSExpression(forConstantValue: true)
             style.addLayer(layer)
         }
 
-        /// 起点绿圈 / 终点红圈（两个常量色圆层，避免表达式风险）。
-        private func addEndpoints(on style: MLNStyle) {
+        /// 起点/终点标注（圆 + “起”“终”文字），用自定义标注视图（不依赖字体 glyphs）。
+        private func addEndpoints(on map: MLNMapView) {
             guard let first = coords.first, let last = coords.last else { return }
-            addEndCircle(on: style, id: "track-start", coord: first,
-                         color: UIColor(red: 0.12, green: 0.62, blue: 0.33, alpha: 1))  // #1F9D55 绿
-            addEndCircle(on: style, id: "track-end", coord: last,
-                         color: UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1))    // #FF3B30 红
+            let start = EndpointAnnotation(); start.coordinate = first; start.isStart = true
+            let end = EndpointAnnotation(); end.coordinate = last; end.isStart = false
+            map.addAnnotations([start, end])
         }
-        private func addEndCircle(on style: MLNStyle, id: String, coord: CLLocationCoordinate2D, color: UIColor) {
-            let f = MLNPointFeature(); f.coordinate = coord
-            let src = MLNShapeSource(identifier: id, shape: f, options: nil)
-            style.addSource(src)
-            let layer = MLNCircleStyleLayer(identifier: id + "-layer", source: src)
-            layer.circleColor = NSExpression(forConstantValue: color)
-            layer.circleRadius = NSExpression(forConstantValue: 8)
-            layer.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
-            layer.circleStrokeWidth = NSExpression(forConstantValue: 2)
-            style.addLayer(layer)
+
+        /// A→B 方位角（度，顺时针自正北）。
+        private static func bearing(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> Double {
+            let lat1 = a.latitude * .pi / 180, lat2 = b.latitude * .pi / 180
+            let dLon = (b.longitude - a.longitude) * .pi / 180
+            let y = sin(dLon) * cos(lat2)
+            let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+            let deg = atan2(y, x) * 180 / .pi
+            return (deg + 360).truncatingRemainder(dividingBy: 360)
         }
 
         /// 公里标：每 1km 一个里程碑（开关）。
@@ -225,20 +247,21 @@ struct MapLibreView: UIViewRepresentable {
             didFit = true
         }
 
-        /// 生成沿线方向箭头图（白色实心三角，深描边以便在亮底可见）。
-        private static func arrowImage() -> UIImage {
-            let size = CGSize(width: 18, height: 18)
+        /// 空心 V 形 chevron（朝上），随 iconRotation 旋到行进方向；白线+浅黑描边便于亮底可见。
+        private static func chevronImage() -> UIImage {
+            let size = CGSize(width: 20, height: 20)
             return UIGraphicsImageRenderer(size: size).image { ctx in
                 let c = ctx.cgContext
                 let p = UIBezierPath()
-                p.move(to: CGPoint(x: 9, y: 3))      // 尖端朝上：沿线符号按方位角旋转后即指向前进方向
-                p.addLine(to: CGPoint(x: 4, y: 14))
-                p.addLine(to: CGPoint(x: 14, y: 14))
-                p.close()
-                c.setFillColor(UIColor.white.cgColor)
-                c.setStrokeColor(UIColor(white: 0, alpha: 0.5).cgColor)
-                c.setLineWidth(1)
-                c.addPath(p.cgPath); c.drawPath(using: .fillStroke)
+                p.move(to: CGPoint(x: 4, y: 13))     // 左臂
+                p.addLine(to: CGPoint(x: 10, y: 6))  // 顶点（朝上）
+                p.addLine(to: CGPoint(x: 16, y: 13)) // 右臂
+                c.setLineCap(.round); c.setLineJoin(.round)
+                // 先描一层深色加宽做轮廓，再描白色
+                c.setStrokeColor(UIColor(white: 0, alpha: 0.55).cgColor); c.setLineWidth(5)
+                c.addPath(p.cgPath); c.strokePath()
+                c.setStrokeColor(UIColor.white.cgColor); c.setLineWidth(2.6)
+                c.addPath(p.cgPath); c.strokePath()
             }
         }
     }
@@ -293,4 +316,32 @@ final class HeadingUserLocationView: MLNUserLocationAnnotationView {
         dot.borderWidth = 3
         layer.addSublayer(dot)
     }
+}
+
+/// 起终点标注数据：isStart 区分起(绿“起”)/终(红“终”)。
+final class EndpointAnnotation: MLNPointAnnotation {
+    var isStart = true
+}
+
+/// 起终点标注视图：圆形底 + 白色“起/终”文字。
+final class EndpointMarkerView: MLNAnnotationView {
+    init(isStart: Bool) {
+        super.init(reuseIdentifier: isStart ? "ep-start" : "ep-end")
+        frame = CGRect(x: 0, y: 0, width: 28, height: 28)
+        let color = isStart ? UIColor(red: 0.12, green: 0.62, blue: 0.33, alpha: 1)   // 绿
+                            : UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)     // 红
+        layer.backgroundColor = color.cgColor
+        layer.cornerRadius = 14
+        layer.borderColor = UIColor.white.cgColor
+        layer.borderWidth = 2
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.25; layer.shadowRadius = 2; layer.shadowOffset = .zero
+        let label = UILabel(frame: bounds)
+        label.text = isStart ? "起" : "终"
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 14, weight: .bold)
+        label.textAlignment = .center
+        addSubview(label)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
