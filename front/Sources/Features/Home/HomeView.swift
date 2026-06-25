@@ -41,7 +41,7 @@ struct HomeView: View {
                 .padding()
             }
             .background(Color(hex: 0xF2F3F5))
-            .navigationTitle("徒步")
+            .navigationTitle("路迹")
             .fullScreenCover(isPresented: $showRecording) { RecordingView() }
             .task { summary = (try? TrackRepository().monthlySummary()) ?? (0, 0, 0) }
         }

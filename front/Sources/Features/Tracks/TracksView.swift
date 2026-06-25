@@ -96,10 +96,6 @@ struct ImportPreviewView: View {
                     Text(String(format: "距离 %.2f km · 爬升 %.0f m · 点 %d · 航点 %d",
                                 s.distance / 1000, s.ascent, t.points.count, t.waypoints.count))
                         .font(.caption).foregroundColor(AppColor.ink2)
-                    if !t.hasTime {
-                        Label("该文件缺少时间戳", systemImage: "clock.badge.exclamationmark")
-                            .font(.caption2).foregroundColor(AppColor.warning)
-                    }
                 }.padding(.vertical, 4)
             }
             Section {

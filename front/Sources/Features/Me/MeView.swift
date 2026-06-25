@@ -26,7 +26,7 @@ struct MeView: View {
                     NavigationLink { ImportPreviewView() } label: { Label("导入轨迹", systemImage: "square.and.arrow.down") }
                     NavigationLink { SettingsView() } label: { Label("设置", systemImage: "gearshape") }
                     NavigationLink {
-                        Text("徒步 App v0.1")
+                        Text("路迹 v0.1")
                     } label: {
                         HStack {
                             Label("关于", systemImage: "info.circle")

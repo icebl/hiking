@@ -12,6 +12,8 @@ struct MapLibreView: UIViewRepresentable {
 
     var trackCoordinates: [CLLocationCoordinate2D] = []
     var showsUserLocation: Bool = true
+    /// true 时：有轨迹则自动把相机框到轨迹范围（轨迹详情用）
+    var fitToTrack: Bool = false
 
     /// 在线栅格底图模板（单常量便于切换）。上线/离线仍走自建底图。
     /// 说明：OSM 公共瓦片对 UA 有策略限制→白图；ESRI 世界地形图(World_Topo_Map)在中国区高层级(~z16+)无缓存，
@@ -57,6 +59,7 @@ struct MapLibreView: UIViewRepresentable {
         var parent: MapLibreView
         var coords: [CLLocationCoordinate2D]
         private var trackSource: MLNShapeSource?
+        private var didFit = false
 
         init(_ parent: MapLibreView) {
             self.parent = parent
@@ -113,6 +116,24 @@ struct MapLibreView: UIViewRepresentable {
                 style.addLayer(layer)
                 trackSource = src
             }
+            fitIfNeeded(on: map)
+        }
+
+        /// 有轨迹时把相机框到轨迹范围（仅一次，轨迹详情用）。
+        private func fitIfNeeded(on map: MLNMapView) {
+            guard parent.fitToTrack, !didFit, coords.count > 1 else { return }
+            var minLat = coords[0].latitude, maxLat = coords[0].latitude
+            var minLon = coords[0].longitude, maxLon = coords[0].longitude
+            for c in coords {
+                minLat = min(minLat, c.latitude); maxLat = max(maxLat, c.latitude)
+                minLon = min(minLon, c.longitude); maxLon = max(maxLon, c.longitude)
+            }
+            let bounds = MLNCoordinateBounds(
+                sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
+                ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon))
+            map.setVisibleCoordinateBounds(bounds,
+                edgePadding: UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40), animated: false)
+            didFit = true
         }
     }
 }

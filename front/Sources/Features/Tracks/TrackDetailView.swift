@@ -1,10 +1,12 @@
 import SwiftUI
+import CoreLocation
 
 /// 轨迹详情（任务 6.2 / 5.6）：地图 / 详情 页签 + 操作（导出/导航）。
 struct TrackDetailView: View {
     let trackId: UUID
     @State private var tab = 0       // 0 地图 / 1 详情
     @State private var track: Track?
+    @State private var coords: [CLLocationCoordinate2D] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -12,7 +14,8 @@ struct TrackDetailView: View {
                 .pickerStyle(.segmented).padding()
 
             if tab == 0 {
-                MapLibreView(/* TODO: 传入该轨迹坐标 */).frame(maxHeight: .infinity)
+                MapLibreView(trackCoordinates: coords, showsUserLocation: false, fitToTrack: true)
+                    .frame(maxHeight: .infinity)
             } else {
                 statsList
             }
@@ -30,7 +33,11 @@ struct TrackDetailView: View {
         }
         .navigationTitle(track?.name ?? "轨迹详情")
         .navigationBarTitleDisplayMode(.inline)
-        .task { track = try? TrackRepository().track(id: trackId) }
+        .task {
+            track = try? TrackRepository().track(id: trackId)
+            let pts = (try? TrackRepository().points(trackId: trackId)) ?? []
+            coords = pts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        }
     }
 
     private var statsList: some View {
