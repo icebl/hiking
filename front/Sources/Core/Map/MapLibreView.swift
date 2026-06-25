@@ -10,6 +10,9 @@ struct MapLibreView: UIViewRepresentable {
     /// 控制桥接：缩放/定位/居中由 SwiftUI 控件经 MapController 调用（任务 2.3）。
     var controller: MapController? = nil
 
+    /// 底图模式：在线栅格(ESRI) / 离线矢量(本地 PMTiles)（任务 2.2 / 2.6）
+    var baseMode: MapBaseMode = .onlineRaster
+
     var trackCoordinates: [CLLocationCoordinate2D] = []
     var showsUserLocation: Bool = true
     /// true 时：有轨迹则自动把相机框到轨迹范围（轨迹详情用）
@@ -34,7 +37,8 @@ struct MapLibreView: UIViewRepresentable {
     func makeUIView(context: Context) -> MLNMapView {
         let map = MLNMapView(frame: .zero)
         map.delegate = context.coordinator
-        map.styleURL = Self.blankStyleURL()
+        context.coordinator.lastBaseMode = baseMode
+        map.styleURL = Self.styleURL(for: baseMode)
         map.showsUserLocation = showsUserLocation
         map.showsUserHeadingIndicator = true      // 蓝点朝向箭头，随手机方向旋转
         map.logoView.isHidden = true
@@ -50,13 +54,26 @@ struct MapLibreView: UIViewRepresentable {
     }
 
     func updateUIView(_ map: MLNMapView, context: Context) {
-        context.coordinator.parent = self
-        context.coordinator.coords = trackCoordinates
-        context.coordinator.drawTrack(on: map)
-        context.coordinator.updateKmMarkers(on: map, show: showKmMarkers)
+        let coord = context.coordinator
+        coord.parent = self
+        coord.coords = trackCoordinates
+        if coord.lastBaseMode != baseMode {          // 底图切换 → 换 style（didFinishLoading 重建图层）
+            coord.lastBaseMode = baseMode
+            map.styleURL = Self.styleURL(for: baseMode)
+        }
+        coord.drawTrack(on: map)
+        coord.updateKmMarkers(on: map, show: showKmMarkers)
     }
 
-    /// 最小空 style（version 8），底图源/层在 didFinishLoading 里程序化加入。
+    /// 按底图模式返回 styleURL：在线=空 style(随后加栅格)，离线=矢量 PMTiles 样式。
+    static func styleURL(for mode: MapBaseMode) -> URL {
+        switch mode {
+        case .onlineRaster:          return blankStyleURL()
+        case .offlineVector(let p):  return OfflineVectorStyle.styleURL(pmtilesPath: p)
+        }
+    }
+
+    /// 最小空 style（version 8），在线栅格源/层在 didFinishLoading 里程序化加入。
     private static func blankStyleURL() -> URL {
         let json = #"{"version":8,"sources":{},"layers":[]}"#
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("blank-style.json")
@@ -68,17 +85,22 @@ struct MapLibreView: UIViewRepresentable {
     final class Coordinator: NSObject, MLNMapViewDelegate {
         var parent: MapLibreView
         var coords: [CLLocationCoordinate2D]
+        var lastBaseMode: MapBaseMode = .onlineRaster
         private var trackSource: MLNShapeSource?
         private var didFit = false
+        private var endpointsAdded = false      // 起终点为标注(跨样式重载存活)，只加一次
 
         init(_ parent: MapLibreView) {
             self.parent = parent
             self.coords = parent.trackCoordinates
         }
 
-        /// style 加载完成：加入在线栅格底图（任务 2.2 临时方案），再叠加轨迹。
+        /// style (重)载完成：旧源已随样式失效，复位后重建底图(在线栅格)与轨迹叠加。
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
-            if style.source(withIdentifier: "raster-base") == nil {
+            trackSource = nil          // 样式重载后旧的 track 源/箭头层已不在，置空以重建
+            arrowZoomBucket = -100
+            if case .onlineRaster = parent.baseMode,
+               style.source(withIdentifier: "raster-base") == nil {
                 let src = MLNRasterTileSource(
                     identifier: "raster-base",
                     tileURLTemplates: [parent.rasterTileURLTemplate],
@@ -91,6 +113,7 @@ struct MapLibreView: UIViewRepresentable {
                 let layer = MLNRasterStyleLayer(identifier: "raster-base-layer", source: src)
                 style.addLayer(layer)
             }
+            // 离线矢量底图：样式 JSON 已含矢量源/层，无需在此添加
             drawTrack(on: mapView)
             parent.controller?.zoom = mapView.zoomLevel
         }
@@ -143,7 +166,7 @@ struct MapLibreView: UIViewRepresentable {
                 trackSource = src
                 if parent.fitToTrack {           // 仅完整/计划轨迹（详情、导航）画起终点+箭头；记录中的实时线不画
                     rebuildArrows(on: map)
-                    addEndpoints(on: map)
+                    if !endpointsAdded { addEndpoints(on: map); endpointsAdded = true }  // 标注跨重载存活，只加一次
                 }
             }
             fitIfNeeded(on: map)

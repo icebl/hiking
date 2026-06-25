@@ -11,10 +11,12 @@ struct MapScreen: View {
     @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1）
     @State private var showKm = false           // 公里标开关
+    @State private var baseMode: MapBaseMode = .onlineRaster
+    @State private var showLayerSheet = false
 
     var body: some View {
         ZStack {
-            MapLibreView(controller: mapCtrl, showKmMarkers: showKm,
+            MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
                          onTap: { c in tapped = CoordFormatter.string(c, format: AppSettings.coordFormat) })
                 .ignoresSafeArea()
 
@@ -44,7 +46,7 @@ struct MapScreen: View {
             HStack {
                 Spacer()
                 VStack(spacing: 14) {
-                    ctrl("square.3.stack.3d", "图层")        // TODO(2.6): 切底图/卫星
+                    ctrl("square.3.stack.3d", "图层") { showLayerSheet = true }   // 切底图：在线影像/离线矢量
                     ctrl("square.on.square", "叠加")          // TODO: 多轨迹叠加面板
                     ctrl("wrench.and.screwdriver", "工具")    // 工具箱（P1）
                     Spacer()
@@ -90,6 +92,17 @@ struct MapScreen: View {
             }
         }
         .fullScreenCover(isPresented: $showRecording) { RecordingView() }
+        .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
+            Button("在线影像（ESRI）") { baseMode = .onlineRaster }
+            ForEach(OfflineMaps.list(), id: \.self) { url in
+                Button("离线 · \(url.deletingPathExtension().lastPathComponent)") {
+                    baseMode = .offlineVector(path: url.path)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text(OfflineMaps.list().isEmpty ? "暂无离线包，可在「我的 → 离线地图」导入 .pmtiles" : "切换底图")
+        }
     }
 
     // MARK: - 子组件

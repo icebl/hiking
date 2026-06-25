@@ -7,6 +7,7 @@ struct MapControlsOverlay: View {
     @ObservedObject var controller: MapController
     @Binding var showKm: Bool
     var onPlaceholder: (String) -> Void = { _ in }
+    var onLayers: () -> Void = {}
 
     var body: some View {
         ZStack {
@@ -14,7 +15,7 @@ struct MapControlsOverlay: View {
             HStack {
                 Spacer()
                 VStack(spacing: 14) {
-                    ctrl("square.3.stack.3d", "图层") { onPlaceholder("图层切换后续开放") }
+                    ctrl("square.3.stack.3d", "图层") { onLayers() }
                     ctrl("wrench.and.screwdriver", "工具") { onPlaceholder("工具箱后续开放") }
                     Spacer()
                     zoomGroup

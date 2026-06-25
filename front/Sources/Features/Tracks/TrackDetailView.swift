@@ -15,6 +15,8 @@ struct TrackDetailView: View {
     @StateObject private var mapCtrl = MapController()
     @State private var showKm = false
     @State private var toast: String?
+    @State private var baseMode: MapBaseMode = .onlineRaster
+    @State private var showLayerSheet = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,9 +25,10 @@ struct TrackDetailView: View {
 
             if tab == 0 {
                 ZStack {
-                    MapLibreView(controller: mapCtrl, trackCoordinates: coords,
+                    MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
                                  showsUserLocation: false, fitToTrack: true, showKmMarkers: showKm)
-                    MapControlsOverlay(controller: mapCtrl, showKm: $showKm, onPlaceholder: showToast)
+                    MapControlsOverlay(controller: mapCtrl, showKm: $showKm,
+                                       onPlaceholder: showToast, onLayers: { showLayerSheet = true })
                     if let toast {
                         VStack {
                             Spacer()
@@ -67,6 +70,17 @@ struct TrackDetailView: View {
         .alert("导出失败", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button("好", role: .cancel) {}
         } message: { Text(exportError ?? "") }
+        .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
+            Button("在线影像（ESRI）") { baseMode = .onlineRaster }
+            ForEach(OfflineMaps.list(), id: \.self) { url in
+                Button("离线 · \(url.deletingPathExtension().lastPathComponent)") {
+                    baseMode = .offlineVector(path: url.path)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text(OfflineMaps.list().isEmpty ? "暂无离线包，可在「我的 → 离线地图」导入" : "切换底图")
+        }
     }
 
     /// 导出 GPX（含航点）→ 系统分享面板（任务 5.5）。

@@ -22,7 +22,7 @@ struct MeView: View {
                     .padding(.vertical, 4)
                 }
                 Section("入口") {
-                    NavigationLink { Text("// TODO(2.7) 离线地图下载/管理") } label: { Label("离线地图", systemImage: "square.3.stack.3d") }
+                    NavigationLink { OfflineMapsView() } label: { Label("离线地图", systemImage: "square.3.stack.3d") }
                     NavigationLink { ImportPreviewView() } label: { Label("导入轨迹", systemImage: "square.and.arrow.down") }
                     NavigationLink { SettingsView() } label: { Label("设置", systemImage: "gearshape") }
                     NavigationLink {
