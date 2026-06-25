@@ -12,6 +12,9 @@ struct TrackDetailView: View {
     @State private var exportURL: URL?
     @State private var showShare = false
     @State private var exportError: String?
+    @StateObject private var mapCtrl = MapController()
+    @State private var showKm = false
+    @State private var toast: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,8 +22,21 @@ struct TrackDetailView: View {
                 .pickerStyle(.segmented).padding()
 
             if tab == 0 {
-                MapLibreView(trackCoordinates: coords, showsUserLocation: false, fitToTrack: true)
-                    .frame(maxHeight: .infinity)
+                ZStack {
+                    MapLibreView(controller: mapCtrl, trackCoordinates: coords,
+                                 showsUserLocation: false, fitToTrack: true, showKmMarkers: showKm)
+                    MapControlsOverlay(controller: mapCtrl, showKm: $showKm, onPlaceholder: showToast)
+                    if let toast {
+                        VStack {
+                            Spacer()
+                            Text(toast).font(.caption).foregroundColor(.white)
+                                .padding(.vertical, 8).padding(.horizontal, 14)
+                                .background(Color.black.opacity(0.75)).cornerRadius(10)
+                                .padding(.bottom, 24)
+                        }
+                    }
+                }
+                .frame(maxHeight: .infinity)
             } else {
                 statsList
             }
@@ -73,6 +89,10 @@ struct TrackDetailView: View {
                 // TODO(5.6): 海拔剖面图（点击联动地图）
             }
         }
+    }
+    private func showToast(_ msg: String) {
+        toast = msg
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { if toast == msg { toast = nil } }
     }
     private func row(_ l: String, _ v: String) -> some View { HStack { Text(l); Spacer(); Text(v).foregroundColor(AppColor.ink2) } }
     private func format(_ s: TimeInterval) -> String { let h = Int(s)/3600, m = (Int(s)%3600)/60; return String(format: "%02d:%02d", h, m) }

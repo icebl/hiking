@@ -14,6 +14,8 @@ struct MapLibreView: UIViewRepresentable {
     var showsUserLocation: Bool = true
     /// true 时：有轨迹则自动把相机框到轨迹范围（轨迹详情用）
     var fitToTrack: Bool = false
+    /// true 时：轨迹上每 1km 显示里程碑（公里标）
+    var showKmMarkers: Bool = false
 
     /// 在线栅格底图模板（单常量便于切换）。上线/离线仍走自建底图。
     /// 说明：OSM 公共瓦片对 UA 有策略限制→白图；ESRI 世界地形图(World_Topo_Map)在中国区高层级(~z16+)无缓存，
@@ -34,7 +36,7 @@ struct MapLibreView: UIViewRepresentable {
         map.showsUserLocation = showsUserLocation
         map.showsUserHeadingIndicator = true      // 蓝点朝向箭头，随手机方向旋转
         map.logoView.isHidden = true
-        map.attributionButton.isHidden = false       // 保留版权署名（OSM）
+        map.attributionButton.isHidden = true         // 隐藏版权(i)按钮（遮挡操作；发布前在“关于”补署名）
         map.setCenter(initialCenter, zoomLevel: initialZoom, animated: false)
         controller?.mapView = map
         return map
@@ -44,6 +46,7 @@ struct MapLibreView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.coords = trackCoordinates
         context.coordinator.drawTrack(on: map)
+        context.coordinator.updateKmMarkers(on: map, show: showKmMarkers)
     }
 
     /// 最小空 style（version 8），底图源/层在 didFinishLoading 里程序化加入。
@@ -104,9 +107,10 @@ struct MapLibreView: UIViewRepresentable {
             parent.controller?.zoom = mapView.zoomLevel
         }
 
-        /// 绘制/更新轨迹折线（任务 2.4），叠加在底图之上。
+        /// 绘制/更新轨迹折线 + 起终点圈 + 方向箭头（任务 2.4 / 图7）。
         func drawTrack(on map: MLNMapView) {
             guard coords.count > 1, let style = map.style else { return }
+            parent.controller?.fitCoords = coords
             var pts = coords
             let polyline = MLNPolylineFeature(coordinates: &pts, count: UInt(pts.count))
             if let src = trackSource {
@@ -120,11 +124,89 @@ struct MapLibreView: UIViewRepresentable {
                 layer.lineCap = NSExpression(forConstantValue: "round")
                 style.addLayer(layer)
                 trackSource = src
+                if parent.fitToTrack {           // 仅完整/计划轨迹（详情、导航）画起终点+箭头；记录中的实时线不画
+                    addDirectionArrows(on: style, lineSource: src)
+                    addEndpoints(on: style)
+                }
             }
             fitIfNeeded(on: map)
         }
 
-        /// 有轨迹时把相机框到轨迹范围（仅一次，轨迹详情用）。
+        /// 沿线方向箭头：注册白色箭头图，符号层沿线方向重复排布。
+        private func addDirectionArrows(on style: MLNStyle, lineSource: MLNShapeSource) {
+            if style.image(forName: "trk-arrow") == nil {
+                style.setImage(Self.arrowImage(), forName: "trk-arrow")
+            }
+            let layer = MLNSymbolStyleLayer(identifier: "track-arrows", source: lineSource)
+            layer.iconImageName = NSExpression(forConstantValue: "trk-arrow")
+            layer.symbolPlacement = NSExpression(forConstantValue: "line")
+            layer.symbolSpacing = NSExpression(forConstantValue: 90)
+            layer.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            layer.iconRotationAlignment = NSExpression(forConstantValue: "map")
+            style.addLayer(layer)
+        }
+
+        /// 起点绿圈 / 终点红圈。
+        private func addEndpoints(on style: MLNStyle) {
+            guard let first = coords.first, let last = coords.last else { return }
+            let start = MLNPointFeature(); start.coordinate = first; start.attributes = ["role": "start"]
+            let end = MLNPointFeature(); end.coordinate = last; end.attributes = ["role": "end"]
+            let src = MLNShapeSource(identifier: "track-ends",
+                                     features: [start, end], options: nil)
+            style.addSource(src)
+            let layer = MLNCircleStyleLayer(identifier: "track-ends-layer", source: src)
+            layer.circleColor = NSExpression(
+                format: "MGL_MATCH(role, 'start', %@, 'end', %@, %@)",
+                UIColor(red: 0.12, green: 0.62, blue: 0.33, alpha: 1),   // #1F9D55 绿
+                UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1),    // #FF3B30 红
+                UIColor.gray)
+            layer.circleRadius = NSExpression(forConstantValue: 8)
+            layer.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
+            layer.circleStrokeWidth = NSExpression(forConstantValue: 2)
+            style.addLayer(layer)
+        }
+
+        /// 公里标：每 1km 一个里程碑（开关）。
+        func updateKmMarkers(on map: MLNMapView, show: Bool) {
+            guard let style = map.style else { return }
+            let srcId = "km-markers", layerId = "km-markers-layer"
+            if let l = style.layer(withIdentifier: layerId) { style.removeLayer(l) }
+            if let s = style.source(withIdentifier: srcId) { style.removeSource(s) }
+            guard show, coords.count > 1 else { return }
+
+            var feats: [MLNPointFeature] = []
+            var acc = 0.0
+            var nextKm = 1.0
+            for i in 1..<coords.count {
+                let a = CLLocation(latitude: coords[i-1].latitude, longitude: coords[i-1].longitude)
+                let b = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
+                let seg = b.distance(from: a)
+                while acc + seg >= nextKm * 1000 {
+                    let t = (nextKm * 1000 - acc) / seg
+                    let lat = coords[i-1].latitude + (coords[i].latitude - coords[i-1].latitude) * t
+                    let lon = coords[i-1].longitude + (coords[i].longitude - coords[i-1].longitude) * t
+                    let f = MLNPointFeature()
+                    f.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                    f.attributes = ["label": String(format: "%.0f", nextKm)]
+                    feats.append(f)
+                    nextKm += 1
+                }
+                acc += seg
+            }
+            guard !feats.isEmpty else { return }
+            let src = MLNShapeSource(identifier: srcId, features: feats, options: nil)
+            style.addSource(src)
+            let layer = MLNSymbolStyleLayer(identifier: layerId, source: src)
+            layer.text = NSExpression(forKeyPath: "label")
+            layer.textColor = NSExpression(forConstantValue: UIColor.white)
+            layer.textHaloColor = NSExpression(forConstantValue: UIColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1))
+            layer.textHaloWidth = NSExpression(forConstantValue: 2)
+            layer.textFontSize = NSExpression(forConstantValue: 12)
+            layer.textAllowsOverlap = NSExpression(forConstantValue: true)
+            style.addLayer(layer)
+        }
+
+        /// 有轨迹时把相机框到轨迹范围（仅一次，详情/导航用）。不依赖 controller。
         private func fitIfNeeded(on map: MLNMapView) {
             guard parent.fitToTrack, !didFit, coords.count > 1 else { return }
             var minLat = coords[0].latitude, maxLat = coords[0].latitude
@@ -139,6 +221,23 @@ struct MapLibreView: UIViewRepresentable {
             map.setVisibleCoordinateBounds(bounds,
                 edgePadding: UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40), animated: false)
             didFit = true
+        }
+
+        /// 生成沿线方向箭头图（白色实心三角，深描边以便在亮底可见）。
+        private static func arrowImage() -> UIImage {
+            let size = CGSize(width: 18, height: 18)
+            return UIGraphicsImageRenderer(size: size).image { ctx in
+                let c = ctx.cgContext
+                let p = UIBezierPath()
+                p.move(to: CGPoint(x: 9, y: 3))      // 尖端朝上：沿线符号按方位角旋转后即指向前进方向
+                p.addLine(to: CGPoint(x: 4, y: 14))
+                p.addLine(to: CGPoint(x: 14, y: 14))
+                p.close()
+                c.setFillColor(UIColor.white.cgColor)
+                c.setStrokeColor(UIColor(white: 0, alpha: 0.5).cgColor)
+                c.setLineWidth(1)
+                c.addPath(p.cgPath); c.drawPath(using: .fillStroke)
+            }
         }
     }
 }

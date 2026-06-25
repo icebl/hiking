@@ -1,4 +1,6 @@
 import Foundation
+import UIKit
+import CoreLocation
 import MapLibre
 
 /// 地图控制桥接（任务 2.3）：SwiftUI 悬浮控件 ↔ MLNMapView。
@@ -15,6 +17,25 @@ final class MapController: ObservableObject {
 
     var minZoom: Double = 1
     var maxZoom: Double = 18
+
+    /// 当前轨迹坐标（由 MapLibreView 回填），用于「回到原点」重新框住。
+    var fitCoords: [CLLocationCoordinate2D] = []
+
+    /// 把相机框到轨迹范围（含边距）。
+    func fitTrack(animated: Bool = true) {
+        guard let m = mapView, fitCoords.count > 1 else { return }
+        var minLat = fitCoords[0].latitude, maxLat = fitCoords[0].latitude
+        var minLon = fitCoords[0].longitude, maxLon = fitCoords[0].longitude
+        for c in fitCoords {
+            minLat = min(minLat, c.latitude); maxLat = max(maxLat, c.latitude)
+            minLon = min(minLon, c.longitude); maxLon = max(maxLon, c.longitude)
+        }
+        let bounds = MLNCoordinateBounds(
+            sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
+            ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon))
+        m.setVisibleCoordinateBounds(bounds,
+            edgePadding: UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40), animated: animated)
+    }
 
     /// 放大一级
     func zoomIn() {
