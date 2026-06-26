@@ -24,6 +24,10 @@ struct MapLibreView: UIViewRepresentable {
     var contourPath: String? = nil
     /// 海拔剖面联动：在该坐标显示高亮点（任务 5.6）
     var highlightCoordinate: CLLocationCoordinate2D? = nil
+    /// 工具箱：测量点（测距折线 / 面积多边形）+ 距离雷达
+    var measureCoordinates: [CLLocationCoordinate2D] = []
+    var measureIsArea: Bool = false
+    var showRadar: Bool = false
     /// 点击地图回调（取经纬度，任务 2.8）
     var onTap: ((CLLocationCoordinate2D) -> Void)? = nil
 
@@ -70,6 +74,8 @@ struct MapLibreView: UIViewRepresentable {
         coord.updateKmMarkers(on: map, show: showKmMarkers)
         coord.updateContours(on: map)
         coord.updateHighlight(on: map)
+        coord.updateMeasure(on: map)
+        coord.updateRadar(on: map)
     }
 
     /// 按底图模式返回 styleURL：在线=空 style(随后加栅格)，离线=矢量 PMTiles 样式。
@@ -124,6 +130,8 @@ struct MapLibreView: UIViewRepresentable {
             // 离线矢量底图：样式 JSON 已含矢量源/层，无需在此添加
             drawTrack(on: mapView)
             updateContours(on: mapView)     // 等高线叠加（样式重载后重建）
+            updateMeasure(on: mapView)
+            updateRadar(on: mapView)
             parent.controller?.zoom = mapView.zoomLevel
         }
 
@@ -133,6 +141,7 @@ struct MapLibreView: UIViewRepresentable {
             if let e = annotation as? EndpointAnnotation { return EndpointMarkerView(isStart: e.isStart) }
             if let k = annotation as? KmAnnotation { return KmMarkerView(km: k.km) }
             if annotation is HighlightAnnotation { return HighlightMarkerView() }
+            if let r = annotation as? RadarLabelAnnotation { return RadarLabelView(text: r.text) }
             return nil
         }
 
@@ -264,6 +273,86 @@ struct MapLibreView: UIViewRepresentable {
             }
             if let a = highlightAnnotation { a.coordinate = c }
             else { let a = HighlightAnnotation(); a.coordinate = c; map.addAnnotation(a); highlightAnnotation = a }
+        }
+
+        private static let measurePurple = UIColor(red: 0.49, green: 0.36, blue: 0.99, alpha: 1)
+        private var radarAnnotations: [MLNAnnotation] = []
+
+        /// 测距折线 / 面积多边形 + 顶点（工具箱）。
+        func updateMeasure(on map: MLNMapView) {
+            guard let style = map.style else { return }
+            ["measure-fill-layer", "measure-line-layer", "measure-pts-layer"].forEach {
+                if let l = style.layer(withIdentifier: $0) { style.removeLayer(l) } }
+            ["measure-fill", "measure-line", "measure-pts"].forEach {
+                if let s = style.source(withIdentifier: $0) { style.removeSource(s) } }
+            let pts = parent.measureCoordinates
+            guard !pts.isEmpty else { return }
+
+            // 面积填充（>=3，置底）
+            if parent.measureIsArea, pts.count >= 3 {
+                var arr = pts
+                let pgon = MLNPolygonFeature(coordinates: &arr, count: UInt(arr.count))
+                let s = MLNShapeSource(identifier: "measure-fill", shape: pgon, options: nil)
+                style.addSource(s)
+                let l = MLNFillStyleLayer(identifier: "measure-fill-layer", source: s)
+                l.fillColor = NSExpression(forConstantValue: UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1))
+                l.fillOpacity = NSExpression(forConstantValue: 0.18)
+                style.addLayer(l)
+            }
+            // 折线（>=2；面积时闭合）
+            if pts.count >= 2 {
+                var line = pts
+                if parent.measureIsArea, pts.count >= 3 { line.append(pts[0]) }
+                let poly = MLNPolylineFeature(coordinates: &line, count: UInt(line.count))
+                let s = MLNShapeSource(identifier: "measure-line", shape: poly, options: nil)
+                style.addSource(s)
+                let l = MLNLineStyleLayer(identifier: "measure-line-layer", source: s)
+                l.lineColor = NSExpression(forConstantValue: Self.measurePurple)
+                l.lineWidth = NSExpression(forConstantValue: 3)
+                l.lineCap = NSExpression(forConstantValue: "round")
+                style.addLayer(l)
+            }
+            // 顶点（置顶）
+            let feats = pts.map { c -> MLNPointFeature in let f = MLNPointFeature(); f.coordinate = c; return f }
+            let ps = MLNShapeSource(identifier: "measure-pts", features: feats, options: nil)
+            style.addSource(ps)
+            let pl = MLNCircleStyleLayer(identifier: "measure-pts-layer", source: ps)
+            pl.circleColor = NSExpression(forConstantValue: UIColor.white)
+            pl.circleRadius = NSExpression(forConstantValue: 4)
+            pl.circleStrokeColor = NSExpression(forConstantValue: Self.measurePurple)
+            pl.circleStrokeWidth = NSExpression(forConstantValue: 2)
+            style.addLayer(pl)
+        }
+
+        /// 距离雷达：以当前定位为心的同心距离圈 + 半径标注。
+        func updateRadar(on map: MLNMapView) {
+            guard let style = map.style else { return }
+            if let l = style.layer(withIdentifier: "radar-layer") { style.removeLayer(l) }
+            if let s = style.source(withIdentifier: "radar") { style.removeSource(s) }
+            if !radarAnnotations.isEmpty { map.removeAnnotations(radarAnnotations); radarAnnotations = [] }
+            guard parent.showRadar, let c = LocationManager.shared.location?.coordinate else { return }
+
+            let radii: [Double] = [200, 500, 1000, 2000]
+            let rings = radii.map { r -> MLNPolylineFeature in
+                var pts = Measure.ring(center: c, radius: r)
+                return MLNPolylineFeature(coordinates: &pts, count: UInt(pts.count))
+            }
+            let src = MLNShapeSource(identifier: "radar", features: rings, options: nil)
+            style.addSource(src)
+            let layer = MLNLineStyleLayer(identifier: "radar-layer", source: src)
+            layer.lineColor = NSExpression(forConstantValue: UIColor(red: 0.21, green: 0.77, blue: 0.75, alpha: 0.85))
+            layer.lineWidth = NSExpression(forConstantValue: 1.2)
+            style.addLayer(layer)
+
+            var anns: [MLNAnnotation] = []
+            for r in radii {
+                let a = RadarLabelAnnotation()
+                a.coordinate = Measure.destination(c, distance: r, bearingDeg: 0)
+                a.text = r >= 1000 ? String(format: "%.0fkm", r / 1000) : "\(Int(r))m"
+                anns.append(a)
+            }
+            map.addAnnotations(anns)
+            radarAnnotations = anns
         }
 
         /// 公里标：每 1km 一个里程碑（深色圆+白数字）。用标注视图（不依赖字体 glyphs）。开关。
@@ -436,6 +525,29 @@ final class KmAnnotation: MLNPointAnnotation {
 
 /// 海拔剖面联动高亮点。
 final class HighlightAnnotation: MLNPointAnnotation {}
+
+/// 距离雷达半径标注。
+final class RadarLabelAnnotation: MLNPointAnnotation { var text = "" }
+
+/// 雷达半径标签视图（青色胶囊）。
+final class RadarLabelView: MLNAnnotationView {
+    init(text: String) {
+        super.init(reuseIdentifier: "radar-\(text)")
+        let label = UILabel()
+        label.text = text
+        label.font = .systemFont(ofSize: 10, weight: .semibold)
+        label.textColor = .white
+        label.textAlignment = .center
+        label.backgroundColor = UIColor(red: 0.21, green: 0.77, blue: 0.75, alpha: 0.9)
+        label.sizeToFit()
+        label.frame = label.frame.insetBy(dx: -6, dy: -3)
+        label.layer.cornerRadius = 8
+        label.layer.masksToBounds = true
+        frame = label.bounds
+        addSubview(label)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
 
 /// 高亮点视图：橙色圆 + 白边。
 final class HighlightMarkerView: MLNAnnotationView {

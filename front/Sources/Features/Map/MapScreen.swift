@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 /// 地图（全屏沉浸，任务 2.x）：底图 + 悬浮控件 + 居中信息条 + 底部记录/导航 + 点击取经纬度。
 /// 控件布局对齐 UI/视觉稿/原型.html：
@@ -14,12 +15,22 @@ struct MapScreen: View {
     @State private var showContours = false      // 等高线开关
     @State private var baseMode: MapBaseMode = .onlineRaster
     @State private var showLayerSheet = false
+    // 工具箱：测距 / 面积 / 距离雷达
+    enum Measure { case none, distance, area }
+    @State private var measure: Measure = .none
+    @State private var measurePoints: [CLLocationCoordinate2D] = []
+    @State private var showRadar = false
+    @State private var showToolSheet = false
 
     var body: some View {
         ZStack {
             MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
-                         onTap: { c in tapped = CoordFormatter.string(c, format: AppSettings.coordFormat) })
+                         measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
+                         onTap: { c in
+                             if measure != .none { measurePoints.append(c) }
+                             else { tapped = CoordFormatter.string(c, format: AppSettings.coordFormat) }
+                         })
                 .ignoresSafeArea()
 
             // 信息条：靠上居中（WGS84 浅绿高亮）+ 缩放级别读数（诊断）
@@ -50,7 +61,7 @@ struct MapScreen: View {
                 VStack(spacing: 14) {
                     ctrl("square.3.stack.3d", "图层") { showLayerSheet = true }   // 切底图：在线影像/离线矢量
                     ctrl("square.on.square", "叠加")          // TODO: 多轨迹叠加面板
-                    ctrl("wrench.and.screwdriver", "工具")    // 工具箱（P1）
+                    ctrl("wrench.and.screwdriver", "工具", active: measure != .none || showRadar) { showToolSheet = true }
                     Spacer()
                     VStack(spacing: 8) {                       // 缩放：+/- 与滑块同一区
                         zoomGroup
@@ -87,9 +98,10 @@ struct MapScreen: View {
                 .padding(.bottom, 96)
             }
 
-            // 底部 记录 / 导航
+            // 底部：测量条（测距/面积时）+ 记录 / 导航
             VStack {
                 Spacer()
+                if measure != .none { measureBar.padding(.horizontal, 16).padding(.bottom, 8) }
                 HStack(spacing: 12) {
                     Button { showRecording = true } label: { cta("记录", "record.circle", .white, AppColor.ink) }
                     Button { /* TODO(4.5): 选轨迹进入导航 */ } label: { cta("导航", "location.north.line.fill", AppColor.primary, .white) }
@@ -97,6 +109,13 @@ struct MapScreen: View {
             }
         }
         .fullScreenCover(isPresented: $showRecording) { RecordingView() }
+        .confirmationDialog("工具箱", isPresented: $showToolSheet, titleVisibility: .visible) {
+            Button("测距") { measure = .distance; measurePoints = []; tapped = nil }
+            Button("面积") { measure = .area; measurePoints = []; tapped = nil }
+            Button(showRadar ? "关闭距离雷达" : "距离雷达") { showRadar.toggle() }
+            if measure != .none { Button("退出测量", role: .destructive) { measure = .none; measurePoints = [] } }
+            Button("取消", role: .cancel) {}
+        } message: { Text("点击地图连点测量；距离雷达以当前定位为中心显示同心圈") }
         .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
             Button("在线影像（ESRI，含已缓存离线区域）") { baseMode = .onlineRaster }
             ForEach(OfflineMaps.list().filter { OfflineMaps.isVectorBase($0) }, id: \.self) { url in
@@ -118,6 +137,26 @@ struct MapScreen: View {
         } else {
             showContours.toggle()
         }
+    }
+
+    private var measureBar: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(measure == .area ? "面积" : "测距").font(.caption).foregroundColor(.white.opacity(0.8))
+                Text(measure == .area ? Measure.areaText(Measure.polygonArea(measurePoints))
+                                      : Measure.distanceText(Measure.totalDistance(measurePoints)))
+                    .font(.system(size: 18, weight: .bold)).foregroundColor(.white)
+            }
+            Spacer()
+            Button { if !measurePoints.isEmpty { measurePoints.removeLast() } } label: {
+                Image(systemName: "arrow.uturn.backward").foregroundColor(.white)
+            }.disabled(measurePoints.isEmpty)
+            Button { measurePoints = [] } label: { Text("清除").foregroundColor(.white) }
+            Button { measure = .none; measurePoints = [] } label: { Text("退出").foregroundColor(AppColor.recording) }
+        }
+        .font(.subheadline)
+        .padding(.vertical, 10).padding(.horizontal, 14)
+        .background(Color.black.opacity(0.78)).cornerRadius(12)
     }
 
     private var infoBar: some View {
