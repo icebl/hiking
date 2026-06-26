@@ -1,10 +1,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import MapLibre
 
 /// 离线地图管理（任务 2.7 / A 段）：导入 / 列表 / 删除 本地矢量离线包(.pmtiles)。
 /// 离线包由电脑侧 planetiler 生成（见 tools/ 文档），导入后在地图页「图层」切到离线矢量底图。
 struct OfflineMapsView: View {
     @State private var packs: [URL] = []
+    @State private var regions: [MLNOfflinePack] = []   // 已缓存的离线影像区域
     @State private var showImporter = false
     @State private var shareURL: URL?
 
@@ -20,6 +22,25 @@ struct OfflineMapsView: View {
             } footer: {
                 Text("矢量底图用电脑侧 planetiler 生成 .pmtiles 后导入；卫星影像可直接「框选下载」。"
                      + "导入/下载后在地图页右上「图层」切换，断网可用。")
+            }
+
+            Section("离线影像区域（已缓存）") {
+                if regions.isEmpty {
+                    Text("暂无（用上方「框选下载」）").foregroundColor(AppColor.ink2)
+                } else {
+                    ForEach(regions, id: \.self) { pack in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(regionName(pack)).font(.system(size: 15, weight: .semibold))
+                            Text(String(format: "影像缓存 · %.1f MB", regionMB(pack)))
+                                .font(.caption).foregroundColor(AppColor.ink2)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                MLNOfflineStorage.shared.removePack(pack) { _ in reloadRegions() }
+                            } label: { Label("删除", systemImage: "trash") }
+                        }
+                    }
+                }
             }
 
             Section("已有离线包") {
@@ -53,7 +74,10 @@ struct OfflineMapsView: View {
             }
         }
         .navigationTitle("离线地图")
-        .onAppear(perform: reload)
+        .onAppear {
+            reload()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { reloadRegions() }  // packs 异步加载兜底
+        }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.data]) { result in
             if case .success(let url) = result {
                 try? OfflineMaps.importPack(from: url)
@@ -70,5 +94,15 @@ struct OfflineMapsView: View {
         if OfflineMaps.isContour(url) { return "等高线" }
         return "矢量底图"
     }
-    private func reload() { packs = OfflineMaps.list() }
+    private func regionName(_ pack: MLNOfflinePack) -> String {
+        String(data: pack.context, encoding: .utf8) ?? "影像区域"
+    }
+    private func regionMB(_ pack: MLNOfflinePack) -> Double {
+        Double(pack.progress.countOfTileBytesCompleted) / 1024 / 1024
+    }
+    private func reloadRegions() { regions = MLNOfflineStorage.shared.packs ?? [] }
+    private func reload() {
+        packs = OfflineMaps.list()
+        reloadRegions()
+    }
 }
