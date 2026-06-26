@@ -9,6 +9,9 @@ struct MapControlsOverlay: View {
     var showContours: Bool = false
     var hasProfile: Bool = false
     var showProfile: Bool = false
+    /// 路网开关（仅离线矢量底图有效）；showRoadNetwork 绑定，isVectorBase 控制是否显示该控件。
+    var isVectorBase: Bool = false
+    @Binding var showRoadNetwork: Bool
     var onPlaceholder: (String) -> Void = { _ in }
     var onLayers: () -> Void = {}
     var onContours: () -> Void = {}
@@ -28,6 +31,10 @@ struct MapControlsOverlay: View {
                     Spacer()
                     ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }
                     ctrl("mountain.2", "等高线", active: showContours) { onContours() }
+                    if isVectorBase {
+                        ctrl("point.topleft.down.curvedto.point.bottomright.up", "路网",
+                             active: showRoadNetwork) { showRoadNetwork.toggle() }
+                    }
                     if hasProfile {
                         ctrl("chart.xyaxis.line", "剖面", active: showProfile) { onProfile() }
                     }

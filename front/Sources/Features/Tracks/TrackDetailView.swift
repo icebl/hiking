@@ -16,6 +16,7 @@ struct TrackDetailView: View {
     @StateObject private var mapCtrl = MapController()
     @State private var showKm = false
     @State private var showContours = false
+    @State private var showRoadNetwork = false
     @State private var toast: String?
     @State private var baseMode: MapBaseMode = .onlineRaster
     @State private var showLayerSheet = false
@@ -38,9 +39,11 @@ struct TrackDetailView: View {
                                      showsUserLocation: false, fitToTrack: true, showKmMarkers: showKm,
                                      showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                                      highlightCoordinate: selectedProfileIndex.flatMap {
-                                         profile.indices.contains($0) ? profile[$0].coord : nil })
+                                         profile.indices.contains($0) ? profile[$0].coord : nil },
+                                     showRoadNetwork: showRoadNetwork)
                         MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
                                            hasProfile: !profile.isEmpty, showProfile: showProfile,
+                                           isVectorBase: isVectorBase, showRoadNetwork: $showRoadNetwork,
                                            onPlaceholder: showToast, onLayers: { showLayerSheet = true },
                                            onContours: { toggleContours() },
                                            onProfile: {
@@ -126,6 +129,12 @@ struct TrackDetailView: View {
         } message: {
             Text("卫星离线：在「在线影像」底图下，已下载区域断网自动显示")
         }
+    }
+
+    /// 当前是否为离线矢量底图（路网控件仅此模式显示）。
+    private var isVectorBase: Bool {
+        if case .offlineVector = baseMode { return true }
+        return false
     }
 
     /// 导出 GPX（含航点）→ 系统分享面板（任务 5.5）。

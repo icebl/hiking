@@ -24,6 +24,12 @@ targets:
     sources:
       - path: Sources
       - path: Resources
+        excludes:
+          - "glyphs/**"
+      # glyphs 用文件夹引用（type: folder → bundle 内保留 glyphs/{fontstack}/{range}.pbf 层级），
+      # 否则按 group 加入会被铺平，Bundle.main.url(forResource:"glyphs") 取不到目录。
+      - path: Resources/glyphs
+        type: folder
     dependencies:
       - package: MapLibre
       - package: GRDB

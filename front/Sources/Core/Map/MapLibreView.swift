@@ -28,6 +28,8 @@ struct MapLibreView: UIViewRepresentable {
     var measureCoordinates: [CLLocationCoordinate2D] = []
     var measureIsArea: Bool = false
     var showRadar: Bool = false
+    /// 路网图层（仅离线矢量底图有效）：醒目橙色徒步路径，开关控制。
+    var showRoadNetwork: Bool = false
     /// 点击地图回调（取经纬度，任务 2.8）
     var onTap: ((CLLocationCoordinate2D) -> Void)? = nil
 
@@ -76,6 +78,7 @@ struct MapLibreView: UIViewRepresentable {
         coord.updateHighlight(on: map)
         coord.updateMeasure(on: map)
         coord.updateRadar(on: map)
+        coord.updateRoadNetwork(on: map)
     }
 
     /// 按底图模式返回 styleURL：在线=空 style(随后加栅格)，离线=矢量 PMTiles 样式。
@@ -132,6 +135,7 @@ struct MapLibreView: UIViewRepresentable {
             updateContours(on: mapView)     // 等高线叠加（样式重载后重建）
             updateMeasure(on: mapView)
             updateRadar(on: mapView)
+            updateRoadNetwork(on: mapView)  // 路网层可见性（离线矢量样式自带该层）
             parent.controller?.zoom = mapView.zoomLevel
         }
 
@@ -386,6 +390,13 @@ struct MapLibreView: UIViewRepresentable {
                 map.removeAnnotations(kmAnnotations)
                 kmAnnotations = []
             }
+        }
+
+        /// 路网层可见性同步（离线矢量样式自带 "road-network" 层，默认隐藏）。
+        /// 仅离线矢量底图存在该层；其他底图无此层 → 取不到即忽略。
+        func updateRoadNetwork(on map: MLNMapView) {
+            guard let layer = map.style?.layer(withIdentifier: "road-network") else { return }
+            layer.isVisible = parent.showRoadNetwork
         }
 
         /// 等高线叠加层（任务 2.5）：青色细线 + 计曲线(idx==1)加粗；叠在底图之上、轨迹之下。

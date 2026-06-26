@@ -13,6 +13,7 @@ struct MapScreen: View {
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1）
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
+    @State private var showRoadNetwork = false   // 路网开关（仅离线矢量底图有效）
     @State private var baseMode: MapBaseMode = .onlineRaster
     @State private var showLayerSheet = false
     // 工具箱：测距 / 面积 / 距离雷达
@@ -27,6 +28,7 @@ struct MapScreen: View {
             MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
+                         showRoadNetwork: showRoadNetwork,
                          onTap: { c in
                              if measure != .none { measurePoints.append(c) }
                              else { tapped = CoordFormatter.string(c, format: AppSettings.coordFormat) }
@@ -69,6 +71,10 @@ struct MapScreen: View {
                     }
                     Spacer()
                     ctrl("mountain.2", "等高线", active: showContours) { toggleContours() }
+                    if isVectorBase {
+                        ctrl("point.topleft.down.curvedto.point.bottomright.up", "路网",
+                             active: showRoadNetwork) { showRoadNetwork.toggle() }
+                    }
                     // 公里标仅在「轨迹详情」地图（有轨迹）显示，主地图不放
                 }
             }
@@ -130,6 +136,12 @@ struct MapScreen: View {
     }
 
     // MARK: - 子组件
+
+    /// 当前是否为离线矢量底图（路网/标注仅此模式有效）。
+    private var isVectorBase: Bool {
+        if case .offlineVector = baseMode { return true }
+        return false
+    }
 
     private func toggleContours() {
         if OfflineMaps.contourPack() == nil {
