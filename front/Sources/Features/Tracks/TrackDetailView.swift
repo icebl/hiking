@@ -36,7 +36,7 @@ struct TrackDetailView: View {
                 VStack(spacing: 0) {
                     ZStack {
                         MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
-                                     showsUserLocation: false, fitToTrack: true, showKmMarkers: showKm,
+                                     showsUserLocation: true, fitToTrack: true, showKmMarkers: showKm,
                                      showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                                      highlightCoordinate: selectedProfileIndex.flatMap {
                                          profile.indices.contains($0) ? profile[$0].coord : nil },
@@ -70,16 +70,19 @@ struct TrackDetailView: View {
                 statsList
             }
 
-            HStack(spacing: 12) {
-                Button { exportGPX() } label: {
-                    Text("导出").frame(maxWidth: .infinity).frame(height: 52)
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColor.divider))
-                }
-                NavigationLink { NavigationRunView(trackId: trackId) } label: {
-                    Text("使用轨迹导航").fontWeight(.semibold).foregroundColor(.white)
-                        .frame(maxWidth: .infinity).frame(height: 52).background(AppColor.primary).cornerRadius(14)
-                }
-            }.padding()
+            // 显示海拔剖面时隐藏底部按钮（给剖面让出空间）；隐藏剖面/切到详情页时显示。
+            if !(tab == 0 && showProfile && !profile.isEmpty) {
+                HStack(spacing: 12) {
+                    Button { exportGPX() } label: {
+                        Text("导出").frame(maxWidth: .infinity).frame(height: 52)
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColor.divider))
+                    }
+                    NavigationLink { NavigationRunView(trackId: trackId) } label: {
+                        Text("使用轨迹导航").fontWeight(.semibold).foregroundColor(.white)
+                            .frame(maxWidth: .infinity).frame(height: 52).background(AppColor.primary).cornerRadius(14)
+                    }
+                }.padding()
+            }
         }
         .navigationTitle(track?.name ?? "轨迹详情")
         .navigationBarTitleDisplayMode(.inline)

@@ -64,9 +64,9 @@ enum OfflineVectorStyle {
             ["id": "paths", "type": "line", "source": "v", "source-layer": "transportation",
              "filter": ["in", "class", "path", "track", "footway", "cycleway"],
              "paint": ["line-color": "#A0673B", "line-width": 1.4, "line-dasharray": [2.0, 1.5]]],
-            // 路网图层（醒目橙线，默认隐藏，由「路网」开关控制）—— 徒步路径
+            // 路网图层（醒目橙线，默认隐藏，由「路网」开关控制）。
+            // 高亮整个 transportation 路网（道路 + 徒步小径）——城区/野外都能看到，不再只筛 path 类。
             ["id": "road-network", "type": "line", "source": "v", "source-layer": "transportation",
-             "filter": ["in", "class", "path", "track", "footway", "steps", "cycleway"],
              "layout": ["visibility": "none", "line-cap": "round", "line-join": "round"],
              "paint": ["line-color": "#F36B22", "line-width": netWidth, "line-opacity": 0.9]],
             fill("building", "building", "#D9CFC2", 0.7),

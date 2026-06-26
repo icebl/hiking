@@ -19,7 +19,7 @@ struct MapControlsOverlay: View {
 
     var body: some View {
         ZStack {
-            // 右列
+            // 右列：图层 / 工具 / 缩放 / 公里标 / 路网
             HStack {
                 Spacer()
                 VStack(spacing: 14) {
@@ -30,23 +30,25 @@ struct MapControlsOverlay: View {
                     zoomSlider
                     Spacer()
                     ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }
-                    ctrl("mountain.2", "等高线", active: showContours) { onContours() }
                     if isVectorBase {
                         ctrl("point.topleft.down.curvedto.point.bottomright.up", "路网",
                              active: showRoadNetwork) { showRoadNetwork.toggle() }
-                    }
-                    if hasProfile {
-                        ctrl("chart.xyaxis.line", "剖面", active: showProfile) { onProfile() }
                     }
                 }
             }
             .padding(.trailing, 14).padding(.vertical, 16)
 
-            // 左列：回到原点
+            // 左列：定位（顶）— 回到原点 / 等高线 / 剖面（中下）
             HStack {
-                VStack {
+                VStack(spacing: 14) {
+                    ctrl(controller.locateState == .off ? "location" : "location.fill", "定位",
+                         active: controller.locateState == .following) { controller.cycleLocate() }
                     Spacer()
                     ctrl("scope", "回到原点") { controller.fitTrack() }
+                    ctrl("mountain.2", "等高线", active: showContours) { onContours() }
+                    if hasProfile {
+                        ctrl("chart.xyaxis.line", "剖面", active: showProfile) { onProfile() }
+                    }
                     Spacer()
                 }
                 Spacer()

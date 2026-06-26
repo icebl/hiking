@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>徒步APP 视觉稿 · 轨迹详情（改版）</title>
+<style>
+  :root{
+    --primary:#1F9D55; --primary-dark:#15803D; --primary-tint:#E6F6EC;
+    --rec:#FF3B30; --warn:#F2730D; --info:#2D7FF9; --contour:#36C5C0;
+    --road:#F36B22; --ink:#1C1C1E; --ink2:#6B7280; --card:#FFFFFF; --divider:#E5E7EB;
+    --scrim:rgba(18,20,24,.72);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{
+    font-family:-apple-system,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+    background:#0e1116;color:#e8eaed;padding:40px 20px;
+    display:flex;flex-wrap:wrap;gap:48px;justify-content:center;align-items:flex-start;
+  }
+  .col{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .label{font-size:14px;color:#9aa0a6;letter-spacing:.4px;text-align:center;max-width:360px;}
+  .label b{color:#fff;font-weight:600;}
+
+  .phone{width:360px;height:780px;background:#000;border-radius:46px;padding:11px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);position:relative;}
+  .screen{width:100%;height:100%;border-radius:36px;overflow:hidden;position:relative;
+    background:#eae6df;display:flex;flex-direction:column;}
+  .island{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    width:108px;height:30px;background:#000;border-radius:18px;z-index:60;}
+  .statusbar{position:absolute;top:0;left:0;right:0;height:46px;z-index:55;
+    display:flex;justify-content:space-between;align-items:center;padding:14px 24px 0;
+    font-size:13px;font-weight:600;color:#1C1C1E;}
+  .statusbar .right{display:flex;gap:5px;align-items:center;font-size:12px;}
+
+  /* nav bar (地图/详情/标注点 + back) */
+  .navbar{height:46px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    background:#f7f5f1;border-bottom:1px solid var(--divider);position:relative;margin-top:46px;z-index:50;}
+  .navbar .back{position:absolute;left:14px;color:var(--primary);font-size:15px;font-weight:600;}
+  .segs{display:flex;gap:0;background:#e7e3dc;border-radius:9px;padding:2px;}
+  .segs span{font-size:13px;padding:4px 14px;border-radius:7px;color:var(--ink2);}
+  .segs span.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08);}
+
+  /* map area */
+  .map{position:relative;flex:1 1 auto;overflow:hidden;
+    background:radial-gradient(130% 110% at 60% 30%,#cfd9c4 0%,#c2cdb5 45%,#b7c3a8 100%);}
+  .map svg{position:absolute;inset:0;width:100%;height:100%;}
+
+  /* floating round controls */
+  .ctrl{position:absolute;width:44px;height:44px;border-radius:50%;background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:30;}
+  .ctrl svg{width:21px;height:21px;stroke:#1C1C1E;fill:none;stroke-width:1.8;}
+  .ctrl.on svg{stroke:var(--primary);}
+  .ctrl small{position:absolute;bottom:-14px;font-size:9px;color:#fff;font-weight:500;
+    text-shadow:0 1px 2px rgba(0,0,0,.6);white-space:nowrap;}
+
+  /* zoom +/- (smaller, 36) + slider with number in dot */
+  .zoom{position:absolute;right:14px;top:150px;width:36px;background:#fff;border-radius:18px;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:30;}
+  .zoom div{height:36px;display:flex;align-items:center;justify-content:center;}
+  .zoom div:first-child{border-bottom:1px solid var(--divider);}
+  .zoom svg{width:16px;height:16px;stroke:#1C1C1E;stroke-width:2.4;}
+  .slider{position:absolute;right:25px;top:236px;width:4px;height:110px;
+    background:rgba(255,255,255,.7);border-radius:2px;z-index:30;}
+  .slider .thumb{position:absolute;left:50%;top:30px;transform:translateX(-50%);
+    width:30px;height:30px;border-radius:50%;background:var(--primary);
+    box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;
+    color:#fff;font-size:11px;font-weight:700;}
+
+  /* track */
+  .track{fill:none;stroke:var(--rec);stroke-width:3.4;stroke-linecap:round;stroke-linejoin:round;}
+  .road-net{fill:none;stroke:var(--road);stroke-width:3;stroke-linecap:round;opacity:.92;}
+  .ep{position:absolute;width:26px;height:26px;border-radius:50%;border:2px solid #fff;
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;
+    box-shadow:0 2px 4px rgba(0,0,0,.3);z-index:25;}
+
+  /* bottom action buttons */
+  .actions{flex:0 0 auto;display:flex;gap:12px;padding:14px 16px 26px;background:#f7f5f1;}
+  .btn{flex:1;height:50px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+    font-size:15px;font-weight:600;gap:7px;}
+  .btn.ghost{border:1px solid var(--divider);color:var(--ink);}
+  .btn.solid{background:var(--primary);color:#fff;}
+
+  /* elevation profile panel */
+  .profile{flex:0 0 auto;background:#fff;padding:8px 12px 14px;border-top:1px solid var(--divider);}
+  .profile .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
+  .profile .head .t{font-size:12px;color:var(--ink2);}
+  .profile .head .s{font-size:12px;color:var(--ink2);}
+  .profile svg{display:block;width:100%;height:96px;}
+  .yaxis{font-size:8.5px;fill:var(--ink2);}
+  .xaxis{font-size:8.5px;fill:var(--ink2);}
+  .infobar{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:35;
+    background:var(--scrim);color:#fff;border-radius:10px;padding:6px 11px;font-size:11px;font-weight:500;white-space:nowrap;}
+  .infobar b{color:#7EE0A6;}
+  .tagline{font-size:12px;color:var(--ink2);text-align:center;padding:4px 0;}
+</style>
+</head>
+<body>
+
+<!-- ============ 状态 A：显示海拔剖面（底部按钮隐藏） ============ -->
+<div class="col">
+  <div class="phone"><div class="screen">
+    <div class="island"></div>
+    <div class="statusbar"><span>22:30</span><span class="right">●●● 📶 87</span></div>
+
+    <div class="navbar">
+      <span class="back">‹ 返回</span>
+      <div class="segs"><span class="on">地图</span><span>详情</span><span>标注点</span></div>
+    </div>
+
+    <div class="map">
+      <div class="infobar"><b>WGS84</b> 41.6950°N 123.3443°E · 海拔39m</div>
+
+      <!-- 路网（橙）+ 轨迹（红）示意 -->
+      <svg viewBox="0 0 338 430" preserveAspectRatio="none">
+        <path class="road-net" d="M20,120 C80,90 120,160 180,150 C240,140 280,200 320,180"/>
+        <path class="road-net" d="M60,300 C110,280 140,330 210,310 C260,296 300,330 330,320"/>
+        <path class="road-net" d="M150,40 C160,120 140,200 170,300 C185,350 160,390 150,410"/>
+        <path class="track" d="M70,250 C100,180 150,150 190,170 C230,190 250,140 290,150"/>
+      </svg>
+      <div class="ep" style="left:60px;top:240px;background:var(--primary);">起</div>
+      <div class="ep" style="left:282px;top:140px;background:var(--rec);">终</div>
+
+      <!-- 右列：图层/工具 — 缩放 — 公里标/路网 -->
+      <div class="ctrl" style="right:14px;top:12px;"><svg viewBox="0 0 24 24"><path d="M12 3 21 8 12 13 3 8z"/><path d="M3 13 12 18 21 13"/></svg><small>图层</small></div>
+      <div class="ctrl" style="right:14px;top:74px;"><svg viewBox="0 0 24 24"><path d="M4 7l4 4m-1-5L4 9l2 2"/><path d="M14 7l6 6-2 2-6-6z"/></svg><small>工具</small></div>
+      <div class="zoom"><div><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div><div><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></div></div>
+      <div class="slider"><div class="thumb">12</div></div>
+      <div class="ctrl" style="right:14px;top:392px;"><svg viewBox="0 0 24 24"><path d="M4 18h3M4 12h3M4 6h3"/><circle cx="14" cy="6" r="1.6"/><circle cx="14" cy="12" r="1.6"/><circle cx="14" cy="18" r="1.6"/></svg><small>公里标</small></div>
+      <div class="ctrl on" style="right:14px;top:454px;"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8 6h6a4 4 0 0 1 4 4v6"/></svg><small style="color:#fff">路网</small></div>
+
+      <!-- 左列：定位（顶）— 回到原点/等高线/剖面 -->
+      <div class="ctrl" style="left:14px;top:12px;"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3"/></svg><small>定位</small></div>
+      <div class="ctrl" style="left:14px;top:330px;"><svg viewBox="0 0 24 24"><path d="M3 9V4h5M21 9V4h-5M3 15v5h5M21 15v5h-5"/></svg><small>回到原点</small></div>
+      <div class="ctrl on" style="left:14px;top:392px;"><svg viewBox="0 0 24 24"><path d="M3 18l5-7 4 4 5-8 4 11z"/></svg><small style="color:#fff">等高线</small></div>
+      <div class="ctrl on" style="left:14px;top:454px;"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M6 15l4-4 3 2 5-6"/></svg><small style="color:#fff">剖面</small></div>
+    </div>
+
+    <!-- 海拔剖面（Y轴按数据自适应，全程/爬升汇总） -->
+    <div class="profile">
+      <div class="head"><span class="t">海拔剖面</span><span class="s">全程 36.60 km · 累计爬升 1970 m</span></div>
+      <svg viewBox="0 0 338 96" preserveAspectRatio="none">
+        <text class="yaxis" x="2" y="12">1700</text>
+        <text class="yaxis" x="2" y="48">1200</text>
+        <text class="yaxis" x="2" y="86">700</text>
+        <path d="M28,70 L28,46 C60,30 80,52 110,34 C140,18 165,40 195,26 C225,14 255,44 285,30 C300,24 320,40 332,36 L332,70 Z"
+              fill="rgba(54,197,192,.18)"/>
+        <path d="M28,46 C60,30 80,52 110,34 C140,18 165,40 195,26 C225,14 255,44 285,30 C300,24 320,40 332,36"
+              fill="none" stroke="var(--contour)" stroke-width="1.8"/>
+        <text class="xaxis" x="26" y="94">0</text>
+        <text class="xaxis" x="150" y="94">18</text>
+        <text class="xaxis" x="312" y="94">36</text>
+      </svg>
+    </div>
+    <!-- 底部按钮：剖面显示时隐藏 -->
+  </div></div>
+  <div class="label"><b>A · 显示海拔剖面</b><br>底部「导出/导航」隐藏，给剖面让出空间<br>左列：定位 / 回到原点 / 等高线 / 剖面 ｜ Y 轴按数据自适应</div>
+</div>
+
+<!-- ============ 状态 B：隐藏海拔剖面（底部按钮显示） ============ -->
+<div class="col">
+  <div class="phone"><div class="screen">
+    <div class="island"></div>
+    <div class="statusbar"><span>22:30</span><span class="right">●●● 📶 87</span></div>
+
+    <div class="navbar">
+      <span class="back">‹ 返回</span>
+      <div class="segs"><span class="on">地图</span><span>详情</span><span>标注点</span></div>
+    </div>
+
+    <div class="map">
+      <div class="infobar"><b>WGS84</b> 41.6950°N 123.3443°E · 海拔39m</div>
+      <svg viewBox="0 0 338 540" preserveAspectRatio="none">
+        <path class="road-net" d="M20,140 C80,110 120,190 180,180 C240,170 280,240 320,210"/>
+        <path class="road-net" d="M60,380 C110,360 140,420 210,400 C260,386 300,420 330,410"/>
+        <path class="track" d="M70,320 C100,230 150,200 190,220 C230,240 250,180 290,190"/>
+      </svg>
+      <div class="ep" style="left:60px;top:310px;background:var(--primary);">起</div>
+      <div class="ep" style="left:282px;top:180px;background:var(--rec);">终</div>
+
+      <div class="ctrl" style="right:14px;top:12px;"><svg viewBox="0 0 24 24"><path d="M12 3 21 8 12 13 3 8z"/><path d="M3 13 12 18 21 13"/></svg><small>图层</small></div>
+      <div class="ctrl" style="right:14px;top:74px;"><svg viewBox="0 0 24 24"><path d="M4 7l4 4m-1-5L4 9l2 2"/><path d="M14 7l6 6-2 2-6-6z"/></svg><small>工具</small></div>
+      <div class="zoom"><div><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div><div><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></div></div>
+      <div class="slider"><div class="thumb">12</div></div>
+      <div class="ctrl" style="right:14px;top:392px;"><svg viewBox="0 0 24 24"><path d="M4 18h3M4 12h3M4 6h3"/><circle cx="14" cy="6" r="1.6"/><circle cx="14" cy="12" r="1.6"/><circle cx="14" cy="18" r="1.6"/></svg><small>公里标</small></div>
+      <div class="ctrl" style="right:14px;top:454px;"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8 6h6a4 4 0 0 1 4 4v6"/></svg><small>路网</small></div>
+
+      <div class="ctrl" style="left:14px;top:12px;"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3"/></svg><small>定位</small></div>
+      <div class="ctrl" style="left:14px;top:392px;"><svg viewBox="0 0 24 24"><path d="M3 9V4h5M21 9V4h-5M3 15v5h5M21 15v5h-5"/></svg><small>回到原点</small></div>
+      <div class="ctrl" style="left:14px;top:454px;"><svg viewBox="0 0 24 24"><path d="M3 18l5-7 4 4 5-8 4 11z"/></svg><small>等高线</small></div>
+      <div class="ctrl" style="left:14px;top:516px;"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M6 15l4-4 3 2 5-6"/></svg><small>剖面</small></div>
+    </div>
+
+    <!-- 底部按钮：剖面隐藏时显示 -->
+    <div class="actions">
+      <div class="btn ghost">导出</div>
+      <div class="btn solid">▶ 使用轨迹导航</div>
+    </div>
+  </div></div>
+  <div class="label"><b>B · 隐藏海拔剖面</b><br>底部「导出 / 使用轨迹导航」显示<br>点左列「剖面」按钮在 A / B 间切换</div>
+</div>
+
+</body>
+</html>
