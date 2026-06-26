@@ -76,14 +76,41 @@ struct TracksView: View {
     }
 
     // MARK: - 本地列表
-    private var localList: some View {
-        List {
-            ForEach(folders) { f in
-                groupSection(title: f.name, key: f.id.uuidString, items: tracksIn(f.id))
+    @ViewBuilder private var localList: some View {
+        if tracks.isEmpty && folders.isEmpty {
+            emptyState
+        } else if shown.isEmpty && !search.isEmpty {
+            VStack(spacing: 8) {
+                Spacer()
+                Image(systemName: "magnifyingglass").font(.system(size: 36)).foregroundColor(AppColor.ink2)
+                Text("没有匹配「\(search)」的轨迹").foregroundColor(AppColor.ink2)
+                Spacer()
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List {
+                ForEach(folders) { f in
+                    groupSection(title: f.name, key: f.id.uuidString, items: tracksIn(f.id))
+                }
+                groupSection(title: "未分组", key: "ungrouped", items: ungrouped)
             }
-            groupSection(title: "未分组", key: "ungrouped", items: ungrouped)
+            .listStyle(.plain)
         }
-        .listStyle(.plain)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
+                .font(.system(size: 50)).foregroundColor(AppColor.divider)
+            Text("还没有轨迹").font(.headline)
+            Text("去「地图」开始记录，或从微信/文件导入轨迹").font(.subheadline)
+                .foregroundColor(AppColor.ink2).multilineTextAlignment(.center)
+            Button { showImport = true } label: {
+                Text("导入轨迹").fontWeight(.semibold).foregroundColor(.white)
+                    .padding(.horizontal, 24).frame(height: 44).background(AppColor.primary).cornerRadius(AppRadius.button)
+            }
+            Spacer()
+        }.frame(maxWidth: .infinity, maxHeight: .infinity).padding()
     }
 
     private func groupSection(title: String, key: String, items: [Track]) -> some View {

@@ -28,6 +28,11 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     func requestWhenInUse() { manager.requestWhenInUseAuthorization() }
     func requestAlways() { manager.requestAlwaysAuthorization() }
 
+    /// 已授权（前台或始终）
+    var allowed: Bool { authorization == .authorizedWhenInUse || authorization == .authorizedAlways }
+    /// 被拒绝/受限（需引导去设置）
+    var denied: Bool { authorization == .denied || authorization == .restricted }
+
     /// 开始（后台）连续定位。
     func start(background: Bool) {
         if background {

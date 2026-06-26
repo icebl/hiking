@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 沿轨迹导航（任务 4.5/4.7）：进入前选方向 + 同时记录 → 计划线 + 状态条 + 偏航横幅 + 长按结束。
 struct NavigationRunView: View {
@@ -9,6 +10,7 @@ struct NavigationRunView: View {
     @State private var reverse = false
     @State private var alsoRecord = AppSettings.recordWhileNav   // 导航同时记录实走（默认取设置）
     @State private var showSaveDialog = false
+    @State private var showPermAlert = false
 
     var body: some View {
         ZStack {
@@ -25,6 +27,20 @@ struct NavigationRunView: View {
             Button("不保存", role: .destructive) { ctrl.finishDiscarding(); dismiss() }
             Button("继续导航", role: .cancel) {}
         } message: { Text("导航时已同时记录你的实走轨迹。") }
+        .alert("需要定位权限", isPresented: $showPermAlert) {
+            Button("去设置") { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("沿轨迹导航需要定位权限来判断偏航。请在 设置 → 路迹 → 位置 中允许。")
+        }
+    }
+
+    private func beginNavigation() {
+        let loc = LocationManager.shared
+        if loc.denied { showPermAlert = true; return }
+        loc.requestWhenInUse()
+        ctrl.start(trackId: trackId, reverse: reverse, alsoRecord: alsoRecord)
+        started = true
     }
 
     // 进入前：方向选择 + 同时记录（任务 4.5）
@@ -37,7 +53,7 @@ struct NavigationRunView: View {
                     .pickerStyle(.segmented)
                 Toggle("同时记录实走轨迹", isOn: $alsoRecord).tint(AppColor.primary)
                 Button {
-                    ctrl.start(trackId: trackId, reverse: reverse, alsoRecord: alsoRecord); started = true
+                    beginNavigation()
                 } label: {
                     Text("开始导航").fontWeight(.semibold).foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 52)

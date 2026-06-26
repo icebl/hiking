@@ -1,10 +1,12 @@
 import SwiftUI
+import UIKit
 
 /// 记录中（任务 3.11）：地图 + 实时数据面板 + 暂停/结束。
 struct RecordingView: View {
     var resumeSessionId: UUID? = nil
     @Environment(\.dismiss) private var dismiss
     @StateObject private var ctrl = RecordingController()
+    @State private var showPermAlert = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,7 +49,20 @@ struct RecordingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 22))
         }
         .ignoresSafeArea(edges: .top)
-        .onAppear { if let resumeSessionId { ctrl.resume(sessionId: resumeSessionId) } else { ctrl.start() } }
+        .onAppear { startFlow() }
+        .alert("需要定位权限", isPresented: $showPermAlert) {
+            Button("去设置") { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
+            Button("取消", role: .cancel) { dismiss() }
+        } message: {
+            Text("记录轨迹需要定位权限。请在 设置 → 路迹 → 位置 中允许（建议「始终」以便锁屏后台记录）。")
+        }
+    }
+
+    private func startFlow() {
+        let loc = LocationManager.shared
+        if loc.denied { showPermAlert = true; return }
+        loc.requestWhenInUse()   // 未决定→系统弹窗；已授权→无副作用
+        if let resumeSessionId { ctrl.resume(sessionId: resumeSessionId) } else { ctrl.start() }
     }
 
     private func timeString(_ s: TimeInterval) -> String {

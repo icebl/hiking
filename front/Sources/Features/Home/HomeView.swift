@@ -23,7 +23,7 @@ struct HomeView: View {
                         Button { showRecording = true } label: {
                             quick("开始记录", "record.circle", AppColor.primary, .white)
                         }
-                        Button { /* TODO(2.7) 离线地图 */ } label: {
+                        NavigationLink { OfflineMapsView() } label: {
                             quick("离线地图", "square.3.stack.3d", AppColor.primaryTint, AppColor.primaryDark)
                         }
                     }
