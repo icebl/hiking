@@ -96,21 +96,15 @@ struct MapScreen: View {
         }
         .fullScreenCover(isPresented: $showRecording) { RecordingView() }
         .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
-            Button("在线影像（ESRI）") { baseMode = .onlineRaster }
-            ForEach(OfflineMaps.list().filter { !OfflineMaps.isContour($0) }, id: \.self) { url in
-                let n = url.deletingPathExtension().lastPathComponent
-                if OfflineMaps.isRaster(url) {
-                    Button("离线影像 · \(n)") {
-                        baseMode = .offlineRaster(path: url.path)
-                        if let b = OfflineMaps.bounds(of: url) { mapCtrl.fit(sw: b.sw, ne: b.ne) }  // 自动框到覆盖区
-                    }
-                } else {
-                    Button("离线矢量 · \(n)") { baseMode = .offlineVector(path: url.path) }
+            Button("在线影像（ESRI，含已缓存离线区域）") { baseMode = .onlineRaster }
+            ForEach(OfflineMaps.list().filter { OfflineMaps.isVectorBase($0) }, id: \.self) { url in
+                Button("离线矢量 · \(url.deletingPathExtension().lastPathComponent)") {
+                    baseMode = .offlineVector(path: url.path)
                 }
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text(OfflineMaps.list().isEmpty ? "暂无离线包，可在「我的 → 离线地图」下载/导入" : "切换底图")
+            Text("卫星离线：在「在线影像」底图下，已框选下载的区域断网自动显示")
         }
     }
 
