@@ -18,6 +18,8 @@ struct TrackDetailView: View {
     @State private var toast: String?
     @State private var baseMode: MapBaseMode = .onlineRaster
     @State private var showLayerSheet = false
+    @State private var profile: [ElevSample] = []
+    @State private var selectedProfileIndex: Int?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,24 +27,31 @@ struct TrackDetailView: View {
                 .pickerStyle(.segmented).padding()
 
             if tab == 0 {
-                ZStack {
-                    MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
-                                 showsUserLocation: false, fitToTrack: true, showKmMarkers: showKm,
-                                 showContours: showContours, contourPath: OfflineMaps.contourPack()?.path)
-                    MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
-                                       onPlaceholder: showToast, onLayers: { showLayerSheet = true },
-                                       onContours: { toggleContours() })
-                    if let toast {
-                        VStack {
-                            Spacer()
-                            Text(toast).font(.caption).foregroundColor(.white)
-                                .padding(.vertical, 8).padding(.horizontal, 14)
-                                .background(Color.black.opacity(0.75)).cornerRadius(10)
-                                .padding(.bottom, 24)
+                VStack(spacing: 0) {
+                    ZStack {
+                        MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
+                                     showsUserLocation: false, fitToTrack: true, showKmMarkers: showKm,
+                                     showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
+                                     highlightCoordinate: selectedProfileIndex.flatMap {
+                                         profile.indices.contains($0) ? profile[$0].coord : nil })
+                        MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
+                                           onPlaceholder: showToast, onLayers: { showLayerSheet = true },
+                                           onContours: { toggleContours() })
+                        if let toast {
+                            VStack {
+                                Spacer()
+                                Text(toast).font(.caption).foregroundColor(.white)
+                                    .padding(.vertical, 8).padding(.horizontal, 14)
+                                    .background(Color.black.opacity(0.75)).cornerRadius(10)
+                                    .padding(.bottom, 24)
+                            }
                         }
                     }
+                    .frame(maxHeight: .infinity)
+                    if !profile.isEmpty {
+                        ElevationProfileView(samples: profile, selected: $selectedProfileIndex)
+                    }
                 }
-                .frame(maxHeight: .infinity)
             } else {
                 statsList
             }
@@ -66,6 +75,7 @@ struct TrackDetailView: View {
             points = (try? TrackRepository().points(trackId: trackId)) ?? []
             waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
             coords = points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+            profile = Self.buildProfile(points)
         }
         .sheet(isPresented: $showShare) {
             if let exportURL { ShareSheet(items: [exportURL]) }
@@ -107,6 +117,32 @@ struct TrackDetailView: View {
             }
         }
     }
+    /// 构建海拔剖面采样（累计距离/海拔，海拔缺失则沿用上一个；下采样到 ~300 点）。无任何海拔则返回空（不显示）。
+    private static func buildProfile(_ pts: [TrackPoint]) -> [ElevSample] {
+        guard pts.count > 1, pts.contains(where: { $0.elevation != nil }) else { return [] }
+        var raw: [(d: Double, ele: Double, c: CLLocationCoordinate2D)] = []
+        var acc = 0.0, lastEle = 0.0
+        var prev: CLLocation?
+        for p in pts {
+            let loc = CLLocation(latitude: p.lat, longitude: p.lon)
+            if let prev { acc += loc.distance(from: prev) }
+            prev = loc
+            if let e = p.elevation { lastEle = e }
+            raw.append((acc / 1000, lastEle, loc.coordinate))
+        }
+        let step = max(1, raw.count / 300)
+        var out: [ElevSample] = []
+        var i = 0
+        while i < raw.count {
+            out.append(ElevSample(id: out.count, d: raw[i].d, ele: raw[i].ele, coord: raw[i].c))
+            i += step
+        }
+        if let last = raw.last, out.last?.d != last.d {
+            out.append(ElevSample(id: out.count, d: last.d, ele: last.ele, coord: last.c))
+        }
+        return out
+    }
+
     private func toggleContours() {
         if OfflineMaps.contourPack() == nil { showToast("未导入等高线包（我的 → 离线地图 导入 *contour*.pmtiles）") }
         else { showContours.toggle() }

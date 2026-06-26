@@ -22,6 +22,8 @@ struct MapLibreView: UIViewRepresentable {
     /// 等高线（任务 2.5）：开关 + 等高线包本地路径（叠在任何底图之上）
     var showContours: Bool = false
     var contourPath: String? = nil
+    /// 海拔剖面联动：在该坐标显示高亮点（任务 5.6）
+    var highlightCoordinate: CLLocationCoordinate2D? = nil
     /// 点击地图回调（取经纬度，任务 2.8）
     var onTap: ((CLLocationCoordinate2D) -> Void)? = nil
 
@@ -67,6 +69,7 @@ struct MapLibreView: UIViewRepresentable {
         coord.drawTrack(on: map)
         coord.updateKmMarkers(on: map, show: showKmMarkers)
         coord.updateContours(on: map)
+        coord.updateHighlight(on: map)
     }
 
     /// 按底图模式返回 styleURL：在线=空 style(随后加栅格)，离线=矢量 PMTiles 样式。
@@ -129,6 +132,7 @@ struct MapLibreView: UIViewRepresentable {
             if annotation is MLNUserLocation { return HeadingUserLocationView() }
             if let e = annotation as? EndpointAnnotation { return EndpointMarkerView(isStart: e.isStart) }
             if let k = annotation as? KmAnnotation { return KmMarkerView(km: k.km) }
+            if annotation is HighlightAnnotation { return HighlightMarkerView() }
             return nil
         }
 
@@ -250,6 +254,17 @@ struct MapLibreView: UIViewRepresentable {
         }
 
         private var kmAnnotations: [MLNAnnotation] = []
+        private var highlightAnnotation: HighlightAnnotation?
+
+        /// 海拔剖面联动高亮点（任务 5.6）：随选中坐标移动/增删。
+        func updateHighlight(on map: MLNMapView) {
+            guard let c = parent.highlightCoordinate else {
+                if let a = highlightAnnotation { map.removeAnnotation(a); highlightAnnotation = nil }
+                return
+            }
+            if let a = highlightAnnotation { a.coordinate = c }
+            else { let a = HighlightAnnotation(); a.coordinate = c; map.addAnnotation(a); highlightAnnotation = a }
+        }
 
         /// 公里标：每 1km 一个里程碑（深色圆+白数字）。用标注视图（不依赖字体 glyphs）。开关。
         func updateKmMarkers(on map: MLNMapView, show: Bool) {
@@ -417,6 +432,24 @@ final class EndpointAnnotation: MLNPointAnnotation {
 /// 公里标标注数据：km = 第几公里。
 final class KmAnnotation: MLNPointAnnotation {
     var km = 0
+}
+
+/// 海拔剖面联动高亮点。
+final class HighlightAnnotation: MLNPointAnnotation {}
+
+/// 高亮点视图：橙色圆 + 白边。
+final class HighlightMarkerView: MLNAnnotationView {
+    init() {
+        super.init(reuseIdentifier: "highlight")
+        frame = CGRect(x: 0, y: 0, width: 18, height: 18)
+        layer.backgroundColor = UIColor(red: 1.0, green: 0.58, blue: 0.0, alpha: 1).cgColor   // 橙
+        layer.cornerRadius = 9
+        layer.borderColor = UIColor.white.cgColor
+        layer.borderWidth = 3
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.3; layer.shadowRadius = 2; layer.shadowOffset = .zero
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
 /// 公里标视图：深色圆 + 白色公里数（参照图26）。
