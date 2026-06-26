@@ -21,6 +21,9 @@ struct TrackDetailView: View {
     @State private var profile: [ElevSample] = []
     @State private var selectedProfileIndex: Int?
     @State private var showProfile = true
+    @State private var showRename = false
+    @State private var renameText = ""
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,6 +80,27 @@ struct TrackDetailView: View {
         .navigationTitle(track?.name ?? "轨迹详情")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)   // 二级页隐藏底部 Tab（页面结构规则）
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button { renameText = track?.name ?? ""; showRename = true } label: {
+                        Label("重命名", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) { showDeleteConfirm = true } label: {
+                        Label("删除轨迹", systemImage: "trash")
+                    }
+                } label: { Image(systemName: "ellipsis.circle") }
+            }
+        }
+        .alert("重命名轨迹", isPresented: $showRename) {
+            TextField("名称", text: $renameText)
+            Button("保存") { renameTrack() }
+            Button("取消", role: .cancel) {}
+        }
+        .alert("删除该轨迹？", isPresented: $showDeleteConfirm) {
+            Button("删除", role: .destructive) { deleteTrack() }
+            Button("取消", role: .cancel) {}
+        } message: { Text("删除后可在云端同步前恢复（三期）；本机列表将移除。") }
         .task {
             track = try? TrackRepository().track(id: trackId)
             points = (try? TrackRepository().points(trackId: trackId)) ?? []
@@ -150,6 +174,16 @@ struct TrackDetailView: View {
         return out
     }
 
+    private func renameTrack() {
+        let n = renameText.trimmingCharacters(in: .whitespaces)
+        guard !n.isEmpty else { return }
+        try? TrackRepository().rename(id: trackId, name: n)
+        track?.name = n
+    }
+    private func deleteTrack() {
+        try? TrackRepository().softDelete(id: trackId)
+        dismiss()
+    }
     private func toggleContours() {
         if OfflineMaps.contourPack() == nil { showToast("未导入等高线包（我的 → 离线地图 导入 *contour*.pmtiles）") }
         else { showContours.toggle() }
