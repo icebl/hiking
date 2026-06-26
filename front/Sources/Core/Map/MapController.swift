@@ -21,6 +21,14 @@ final class MapController: ObservableObject {
     /// 当前轨迹坐标（由 MapLibreView 回填），用于「回到原点」重新框住。
     var fitCoords: [CLLocationCoordinate2D] = []
 
+    /// 把相机框到给定经纬度范围（如离线影像包覆盖区）。
+    func fit(sw: CLLocationCoordinate2D, ne: CLLocationCoordinate2D, animated: Bool = true) {
+        guard let m = mapView, m.bounds.width > 10, m.bounds.height > 10 else { return }
+        let bounds = MLNCoordinateBounds(sw: sw, ne: ne)
+        m.setVisibleCoordinateBounds(bounds,
+            edgePadding: UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40), animated: animated)
+    }
+
     /// 把相机框到轨迹范围（含边距）。
     func fitTrack(animated: Bool = true) {
         guard let m = mapView, fitCoords.count > 1 else { return }

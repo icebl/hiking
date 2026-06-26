@@ -1,4 +1,6 @@
 import Foundation
+import CoreLocation
+import GRDB
 
 /// 底图模式：在线栅格（ESRI）/ 离线矢量（本地 PMTiles）/ 离线影像（本地 MBTiles 栅格）。
 enum MapBaseMode: Equatable {
@@ -55,5 +57,18 @@ enum OfflineMaps {
     static func sizeMB(_ url: URL) -> Double {
         let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         return Double(bytes) / 1024 / 1024
+    }
+
+    /// 读取离线影像(MBTiles)的覆盖范围（metadata.bounds: minLon,minLat,maxLon,maxLat）。
+    static func bounds(of url: URL) -> (sw: CLLocationCoordinate2D, ne: CLLocationCoordinate2D)? {
+        guard isRaster(url), let dbq = try? DatabaseQueue(path: url.path) else { return nil }
+        let str = (try? dbq.read { db -> String? in
+            try String.fetchOne(db, sql: "SELECT value FROM metadata WHERE name = 'bounds'")
+        }) ?? nil
+        guard let str else { return nil }
+        let p = str.split(separator: ",").compactMap { Double($0) }
+        guard p.count == 4 else { return nil }
+        return (CLLocationCoordinate2D(latitude: p[1], longitude: p[0]),
+                CLLocationCoordinate2D(latitude: p[3], longitude: p[2]))
     }
 }

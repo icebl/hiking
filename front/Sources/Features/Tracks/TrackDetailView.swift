@@ -78,7 +78,10 @@ struct TrackDetailView: View {
             ForEach(OfflineMaps.list().filter { !OfflineMaps.isContour($0) }, id: \.self) { url in
                 let n = url.deletingPathExtension().lastPathComponent
                 if OfflineMaps.isRaster(url) {
-                    Button("离线影像 · \(n)") { baseMode = .offlineRaster(path: url.path) }
+                    Button("离线影像 · \(n)") {
+                        baseMode = .offlineRaster(path: url.path)
+                        if let b = OfflineMaps.bounds(of: url) { mapCtrl.fit(sw: b.sw, ne: b.ne) }  // 自动框到覆盖区
+                    }
                 } else {
                     Button("离线矢量 · \(n)") { baseMode = .offlineVector(path: url.path) }
                 }
