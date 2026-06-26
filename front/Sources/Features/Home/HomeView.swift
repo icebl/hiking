@@ -5,6 +5,7 @@ struct HomeView: View {
     var openMap: () -> Void
     @State private var summary: (count: Int, distance: Double, ascent: Double) = (0, 0, 0)
     @State private var showRecording = false
+    @State private var showOffline = false
 
     var body: some View {
         NavigationStack {
@@ -23,7 +24,7 @@ struct HomeView: View {
                         Button { showRecording = true } label: {
                             quick("开始记录", "record.circle", AppColor.primary, .white)
                         }
-                        NavigationLink { OfflineMapsView() } label: {
+                        Button { showOffline = true } label: {
                             quick("离线地图", "square.3.stack.3d", AppColor.primaryTint, AppColor.primaryDark)
                         }
                     }
@@ -42,6 +43,7 @@ struct HomeView: View {
             }
             .background(Color(hex: 0xF2F3F5))
             .navigationTitle("路迹")
+            .navigationDestination(isPresented: $showOffline) { OfflineMapsView() }
             .fullScreenCover(isPresented: $showRecording) { RecordingView() }
             .task { summary = (try? TrackRepository().monthlySummary()) ?? (0, 0, 0) }
         }

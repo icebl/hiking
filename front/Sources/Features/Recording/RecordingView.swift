@@ -40,9 +40,7 @@ struct RecordingView: View {
                     Button { ctrl.state == .paused ? ctrl.resume() : ctrl.pause() } label: {
                         label(ctrl.state == .paused ? "继续" : "暂停", filled: false)
                     }
-                    Button {
-                        _ = try? ctrl.finish(); dismiss()
-                    } label: { label("结束", filled: true) }
+                    HoldToEndButton(title: "长按 3 秒结束") { _ = try? ctrl.finish(); dismiss() }
                 }
             }
             .padding().background(Color.white)

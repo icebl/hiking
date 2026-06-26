@@ -84,12 +84,9 @@ struct NavigationRunView: View {
             .font(.system(size: 13, weight: .semibold))
             .padding(.horizontal, 16).padding(.vertical, 10).background(Color.black.opacity(0.72))
 
-            // 结束：长按 3 秒（单击无效）
-            Text("长按 3 秒结束导航").fontWeight(.semibold).foregroundColor(.white)
-                .frame(maxWidth: .infinity).frame(height: 52)
-                .background(AppColor.recording).cornerRadius(14)
+            // 结束：长按 3 秒（防误触，进度填充）
+            HoldToEndButton(title: "长按 3 秒结束导航") { endNavigation() }
                 .padding(16)
-                .onLongPressGesture(minimumDuration: 3) { endNavigation() }
         }
     }
 

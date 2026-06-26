@@ -52,11 +52,13 @@ struct MapScreen: View {
                     ctrl("square.on.square", "叠加")          // TODO: 多轨迹叠加面板
                     ctrl("wrench.and.screwdriver", "工具")    // 工具箱（P1）
                     Spacer()
-                    zoomGroup                                  // 缩放 +/-（已接 mapCtrl）
-                    zoomSlider                                 // 滑块缩放（已接 mapCtrl）
+                    VStack(spacing: 8) {                       // 缩放：+/- 与滑块同一区
+                        zoomGroup
+                        zoomSlider
+                    }
                     Spacer()
-                    ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }  // 有轨迹时每1km里程碑
                     ctrl("mountain.2", "等高线", active: showContours) { toggleContours() }
+                    // 公里标仅在「轨迹详情」地图（有轨迹）显示，主地图不放
                 }
             }
             .padding(.trailing, 14)

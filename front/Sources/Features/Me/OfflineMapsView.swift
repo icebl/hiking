@@ -9,6 +9,7 @@ struct OfflineMapsView: View {
     @State private var regions: [MLNOfflinePack] = []   // 已缓存的离线影像区域
     @State private var showImporter = false
     @State private var shareURL: URL?
+    @State private var importing = false
 
     var body: some View {
         List {
@@ -38,6 +39,7 @@ struct OfflineMapsView: View {
                             Button(role: .destructive) {
                                 MLNOfflineStorage.shared.removePack(pack) { _ in reloadRegions() }
                             } label: { Label("删除", systemImage: "trash") }
+                            .tint(AppColor.recording)
                         }
                     }
                 }
@@ -61,6 +63,7 @@ struct OfflineMapsView: View {
                             Button(role: .destructive) { OfflineMaps.delete(url); reload() } label: {
                                 Label("删除", systemImage: "trash")
                             }
+                            .tint(AppColor.recording)
                         }
                         .swipeActions(edge: .leading) {
                             Button { shareURL = url } label: { Label("导出", systemImage: "square.and.arrow.up") }
@@ -79,9 +82,23 @@ struct OfflineMapsView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { reloadRegions() }  // packs 异步加载兜底
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.data]) { result in
-            if case .success(let url) = result {
+            guard case .success(let url) = result else { return }
+            importing = true
+            Task.detached {
                 try? OfflineMaps.importPack(from: url)
-                reload()
+                await MainActor.run { importing = false; reload() }
+            }
+        }
+        .overlay {
+            if importing {
+                ZStack {
+                    Color.black.opacity(0.25).ignoresSafeArea()
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        Text("导入中…").font(.subheadline).foregroundColor(AppColor.ink)
+                    }
+                    .padding(24).background(.regularMaterial).cornerRadius(14)
+                }
             }
         }
         .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
