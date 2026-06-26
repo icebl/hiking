@@ -75,14 +75,17 @@ struct TrackDetailView: View {
         } message: { Text(exportError ?? "") }
         .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
             Button("在线影像（ESRI）") { baseMode = .onlineRaster }
-            ForEach(OfflineMaps.list(), id: \.self) { url in
-                Button("离线 · \(url.deletingPathExtension().lastPathComponent)") {
-                    baseMode = .offlineVector(path: url.path)
+            ForEach(OfflineMaps.list().filter { !OfflineMaps.isContour($0) }, id: \.self) { url in
+                let n = url.deletingPathExtension().lastPathComponent
+                if OfflineMaps.isRaster(url) {
+                    Button("离线影像 · \(n)") { baseMode = .offlineRaster(path: url.path) }
+                } else {
+                    Button("离线矢量 · \(n)") { baseMode = .offlineVector(path: url.path) }
                 }
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text(OfflineMaps.list().isEmpty ? "暂无离线包，可在「我的 → 离线地图」导入" : "切换底图")
+            Text(OfflineMaps.list().isEmpty ? "暂无离线包，可在「我的 → 离线地图」下载/导入" : "切换底图")
         }
     }
 

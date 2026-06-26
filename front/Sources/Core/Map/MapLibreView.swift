@@ -74,6 +74,7 @@ struct MapLibreView: UIViewRepresentable {
         switch mode {
         case .onlineRaster:          return blankStyleURL()
         case .offlineVector(let p):  return OfflineVectorStyle.styleURL(pmtilesPath: p)
+        case .offlineRaster(let p):  return OfflineRasterStyle.styleURL(mbtilesPath: p)
         }
     }
 

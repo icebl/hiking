@@ -1,9 +1,10 @@
 import Foundation
 
-/// 底图模式：在线栅格（ESRI）/ 离线矢量（本地 PMTiles 文件）。
+/// 底图模式：在线栅格（ESRI）/ 离线矢量（本地 PMTiles）/ 离线影像（本地 MBTiles 栅格）。
 enum MapBaseMode: Equatable {
     case onlineRaster
     case offlineVector(path: String)
+    case offlineRaster(path: String)
 }
 
 /// 离线包管理（任务 2.7 / A 段）：Documents/offline/*.pmtiles 的导入、列举、删除。
@@ -15,12 +16,18 @@ enum OfflineMaps {
         return base
     }
 
-    /// 已导入的 .pmtiles 列表。
+    /// 已导入/生成的离线包（.pmtiles 矢量 + .mbtiles 栅格）。
     static func list() -> [URL] {
         let items = (try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: [.fileSizeKey])) ?? []
-        return items.filter { $0.pathExtension.lowercased() == "pmtiles" }
+        return items.filter { ["pmtiles", "mbtiles"].contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    static func isRaster(_ url: URL) -> Bool { url.pathExtension.lowercased() == "mbtiles" }
+    /// 矢量底图包：.pmtiles 且非等高线。
+    static func isVectorBase(_ url: URL) -> Bool {
+        url.pathExtension.lowercased() == "pmtiles" && !isContour(url)
     }
 
     /// 导入（拷贝到 offline 目录），返回目标 URL。
