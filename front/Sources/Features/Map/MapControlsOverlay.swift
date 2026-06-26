@@ -7,9 +7,12 @@ struct MapControlsOverlay: View {
     @ObservedObject var controller: MapController
     @Binding var showKm: Bool
     var showContours: Bool = false
+    var hasProfile: Bool = false
+    var showProfile: Bool = false
     var onPlaceholder: (String) -> Void = { _ in }
     var onLayers: () -> Void = {}
     var onContours: () -> Void = {}
+    var onProfile: () -> Void = {}
 
     var body: some View {
         ZStack {
@@ -25,6 +28,9 @@ struct MapControlsOverlay: View {
                     Spacer()
                     ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }
                     ctrl("mountain.2", "等高线", active: showContours) { onContours() }
+                    if hasProfile {
+                        ctrl("chart.xyaxis.line", "剖面", active: showProfile) { onProfile() }
+                    }
                 }
             }
             .padding(.trailing, 14).padding(.vertical, 16)

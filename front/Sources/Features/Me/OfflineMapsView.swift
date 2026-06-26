@@ -85,7 +85,10 @@ struct OfflineMapsView: View {
             guard case .success(let url) = result else { return }
             importing = true
             Task.detached {
+                let start = Date()
                 try? OfflineMaps.importPack(from: url)
+                let elapsed = Date().timeIntervalSince(start)
+                if elapsed < 2 { try? await Task.sleep(nanoseconds: UInt64((2 - elapsed) * 1_000_000_000)) }
                 await MainActor.run { importing = false; reload() }
             }
         }

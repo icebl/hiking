@@ -1,41 +1,85 @@
 import SwiftUI
 
-/// 设置（任务 6.3）：采样/偏航/语音/海拔来源/坐标格式/同时记录。
-/// 这些值后续接入 UserDefaults / AppStorage，并被记录与导航模块读取。
+/// 设置（任务 6.3）：采样/偏航/语音/气压计/坐标格式/同时记录。
+/// 改动先存草稿，**点底部「确认修改」后才写入生效**；否则不生效。
 struct SettingsView: View {
-    @AppStorage("sampleInterval") private var sampleInterval = 5      // 秒
-    @AppStorage("minMove") private var minMove = 5                    // 米
+    // 持久化（被记录/导航/地图读取，见 AppSettings）
+    @AppStorage("sampleInterval") private var sampleInterval = 5
+    @AppStorage("minMove") private var minMove = 5
     @AppStorage("autoPause") private var autoPause = true
-    @AppStorage("altSource") private var altSource = "气压计优先"
-    @AppStorage("offRouteThreshold") private var offRouteThreshold = 25  // 米
+    @AppStorage("useBarometer") private var useBarometer = true
+    @AppStorage("offRouteThreshold") private var offRouteThreshold = 25
     @AppStorage("voiceAlert") private var voiceAlert = false
-    @AppStorage("voiceInterval") private var voiceInterval = 5        // 分钟
+    @AppStorage("voiceInterval") private var voiceInterval = 5
     @AppStorage("recordWhileNav") private var recordWhileNav = true
     @AppStorage("coordFormat") private var coordFormat = "度 dd.ddddd°"
+
+    // 草稿（仅「确认」后写回上面）
+    @State private var dSample = 5
+    @State private var dMinMove = 5
+    @State private var dAutoPause = true
+    @State private var dBaro = true
+    @State private var dOffRoute = 25
+    @State private var dVoice = false
+    @State private var dVoiceInt = 5
+    @State private var dRecNav = true
+    @State private var dCoord = "度 dd.ddddd°"
+    @State private var justSaved = false
 
     var body: some View {
         Form {
             Section("记录") {
-                Stepper("采样间隔 \(sampleInterval) 秒", value: $sampleInterval, in: 1...30)
-                Stepper("最小位移 \(minMove) 米", value: $minMove, in: 1...50)
-                Toggle("静止自动暂停", isOn: $autoPause)
-                Picker("海拔来源", selection: $altSource) { Text("气压计优先").tag("气压计优先"); Text("仅 GPS").tag("仅 GPS") }
+                Stepper("采样间隔 \(dSample) 秒", value: $dSample, in: 1...30)
+                Stepper("最小位移 \(dMinMove) 米", value: $dMinMove, in: 1...50)
+                Toggle("静止自动暂停", isOn: $dAutoPause)
+                Toggle("气压计辅助海拔", isOn: $dBaro)
             }
             Section("导航") {
-                Stepper("偏航阈值 \(offRouteThreshold) 米", value: $offRouteThreshold, in: 10...100, step: 5)
-                Toggle("语音播报", isOn: $voiceAlert)
-                if voiceAlert { Picker("播报间隔", selection: $voiceInterval) { Text("5 分钟").tag(5); Text("10 分钟").tag(10) } }
-                Toggle("导航时同时记录", isOn: $recordWhileNav)
+                Stepper("偏航阈值 \(dOffRoute) 米", value: $dOffRoute, in: 10...100, step: 5)
+                Toggle("语音播报", isOn: $dVoice)
+                if dVoice { Picker("播报间隔", selection: $dVoiceInt) { Text("5 分钟").tag(5); Text("10 分钟").tag(10) } }
+                Toggle("导航时同时记录", isOn: $dRecNav)
             }
             Section("通用") {
-                Picker("坐标格式", selection: $coordFormat) {
+                Picker("坐标格式", selection: $dCoord) {
                     Text("度 dd.ddddd°").tag("度 dd.ddddd°")
                     Text("度分秒 DMS").tag("度分秒 DMS")
                     Text("UTM").tag("UTM")
                 }
                 LabeledContent("账号 · 三期", value: "未登录")
             }
+            Section {
+                Button { apply() } label: {
+                    Text(justSaved && !dirty ? "已保存 ✓" : "确认修改")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                        .foregroundColor(dirty ? AppColor.primary : AppColor.ink2)
+                }
+                .disabled(!dirty)
+            } footer: {
+                Text("修改后需点「确认修改」才生效。")
+            }
         }
         .navigationTitle("设置")
+        .onAppear(perform: loadDraft)
+    }
+
+    private var dirty: Bool {
+        dSample != sampleInterval || dMinMove != minMove || dAutoPause != autoPause
+        || dBaro != useBarometer || dOffRoute != offRouteThreshold || dVoice != voiceAlert
+        || dVoiceInt != voiceInterval || dRecNav != recordWhileNav || dCoord != coordFormat
+    }
+
+    private func loadDraft() {
+        dSample = sampleInterval; dMinMove = minMove; dAutoPause = autoPause; dBaro = useBarometer
+        dOffRoute = offRouteThreshold; dVoice = voiceAlert; dVoiceInt = voiceInterval
+        dRecNav = recordWhileNav; dCoord = coordFormat
+    }
+
+    private func apply() {
+        sampleInterval = dSample; minMove = dMinMove; autoPause = dAutoPause; useBarometer = dBaro
+        offRouteThreshold = dOffRoute; voiceAlert = dVoice; voiceInterval = dVoiceInt
+        recordWhileNav = dRecNav; coordFormat = dCoord
+        justSaved = true
     }
 }

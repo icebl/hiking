@@ -11,10 +11,9 @@ enum AppSettings {
     static var autoPause: Bool {                 // 静止自动暂停
         d.object(forKey: "autoPause") != nil ? d.bool(forKey: "autoPause") : true
     }
-    static var altSource: String {               // 海拔来源
-        d.string(forKey: "altSource") ?? "气压计优先"
+    static var useBarometer: Bool {              // 气压计辅助海拔（关则仅 GPS）
+        d.object(forKey: "useBarometer") != nil ? d.bool(forKey: "useBarometer") : true
     }
-    static var useBarometer: Bool { altSource != "仅 GPS" }
 
     static var offRouteThreshold: Double {        // 偏航阈值（米）
         d.object(forKey: "offRouteThreshold") != nil ? Double(d.integer(forKey: "offRouteThreshold")) : 25

@@ -20,6 +20,7 @@ struct TrackDetailView: View {
     @State private var showLayerSheet = false
     @State private var profile: [ElevSample] = []
     @State private var selectedProfileIndex: Int?
+    @State private var showProfile = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,8 +36,13 @@ struct TrackDetailView: View {
                                      highlightCoordinate: selectedProfileIndex.flatMap {
                                          profile.indices.contains($0) ? profile[$0].coord : nil })
                         MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
+                                           hasProfile: !profile.isEmpty, showProfile: showProfile,
                                            onPlaceholder: showToast, onLayers: { showLayerSheet = true },
-                                           onContours: { toggleContours() })
+                                           onContours: { toggleContours() },
+                                           onProfile: {
+                                               withAnimation { showProfile.toggle() }
+                                               if !showProfile { selectedProfileIndex = nil }
+                                           })
                         if let toast {
                             VStack {
                                 Spacer()
@@ -48,8 +54,9 @@ struct TrackDetailView: View {
                         }
                     }
                     .frame(maxHeight: .infinity)
-                    if !profile.isEmpty {
+                    if !profile.isEmpty && showProfile {
                         ElevationProfileView(samples: profile, selected: $selectedProfileIndex)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
             } else {
