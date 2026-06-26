@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct OfflineMapsView: View {
     @State private var packs: [URL] = []
     @State private var showImporter = false
+    @State private var shareURL: URL?
 
     var body: some View {
         List {
@@ -40,6 +41,13 @@ struct OfflineMapsView: View {
                                 Label("删除", systemImage: "trash")
                             }
                         }
+                        .swipeActions(edge: .leading) {
+                            Button { shareURL = url } label: { Label("导出", systemImage: "square.and.arrow.up") }
+                                .tint(AppColor.info)
+                        }
+                        .contextMenu {
+                            Button { shareURL = url } label: { Label("导出 / 分享", systemImage: "square.and.arrow.up") }
+                        }
                     }
                 }
             }
@@ -51,6 +59,9 @@ struct OfflineMapsView: View {
                 try? OfflineMaps.importPack(from: url)
                 reload()
             }
+        }
+        .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
+            if let shareURL { ShareSheet(items: [shareURL]) }
         }
     }
 
