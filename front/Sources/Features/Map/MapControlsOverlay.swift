@@ -58,17 +58,17 @@ struct MapControlsOverlay: View {
     private var zoomGroup: some View {
         VStack(spacing: 0) {
             Button { controller.zoomIn() } label: {
-                Image(systemName: "plus").font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(AppColor.ink).frame(width: 44, height: 44)
+                Image(systemName: "plus").font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(AppColor.ink).frame(width: 36, height: 36)
             }
-            Rectangle().fill(AppColor.divider).frame(width: 44, height: 1)
+            Rectangle().fill(AppColor.divider).frame(width: 36, height: 1)
             Button { controller.zoomOut() } label: {
-                Image(systemName: "minus").font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(AppColor.ink).frame(width: 44, height: 44)
+                Image(systemName: "minus").font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(AppColor.ink).frame(width: 36, height: 36)
             }
         }
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
     }
 
@@ -77,14 +77,18 @@ struct MapControlsOverlay: View {
             ? (controller.zoom - controller.minZoom) / (controller.maxZoom - controller.minZoom) : 0.5
         return ZStack(alignment: .top) {
             Capsule().fill(Color.white.opacity(0.6)).frame(width: 4, height: 110)
-            Circle().fill(AppColor.primary).frame(width: 24, height: 24)
-                .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
-                .offset(y: CGFloat(1 - min(1, max(0, frac))) * 86)
+            ZStack {
+                Circle().fill(AppColor.primary).frame(width: 30, height: 30)
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                Text(String(format: "%.0f", controller.zoom))
+                    .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+            }
+            .offset(y: CGFloat(1 - min(1, max(0, frac))) * 83)
         }
-        .frame(width: 24, height: 110)
+        .frame(width: 30, height: 113)
         .contentShape(Rectangle())
         .gesture(DragGesture().onChanged { v in
-            controller.setZoom(fraction: 1 - Double(v.location.y) / 110)
+            controller.setZoom(fraction: 1 - Double(v.location.y) / 113)
         })
     }
 

@@ -38,7 +38,6 @@ struct MapScreen: View {
             // 信息条：靠上居中（WGS84 浅绿高亮）+ 缩放级别读数（诊断）
             VStack(spacing: 6) {
                 infoBar
-                zoomReadout
                 Spacer()
             }
             .padding(.top, 6)
@@ -110,7 +109,10 @@ struct MapScreen: View {
                 if measure != .none { measureBar.padding(.horizontal, 16).padding(.bottom, 8) }
                 HStack(spacing: 12) {
                     Button { showRecording = true } label: { cta("记录", "record.circle", .white, AppColor.ink) }
-                    Button { /* TODO(4.5): 选轨迹进入导航 */ } label: { cta("导航", "location.north.line.fill", AppColor.primary, .white) }
+                    // 导航按钮暂时隐藏（功能保留，待 4.5 选轨迹进入导航后再开放）
+                    if false {
+                        Button { /* TODO(4.5): 选轨迹进入导航 */ } label: { cta("导航", "location.north.line.fill", AppColor.primary, .white) }
+                    }
                 }.padding(.horizontal, 16).padding(.bottom, 30)
             }
         }
@@ -160,14 +162,24 @@ struct MapScreen: View {
                     .font(.system(size: 18, weight: .bold)).foregroundColor(.white)
             }
             Spacer()
-            Button { if !measurePoints.isEmpty { measurePoints.removeLast() } } label: {
-                Image(systemName: "arrow.uturn.backward").foregroundColor(.white)
-            }.disabled(measurePoints.isEmpty)
-            Button { measurePoints = [] } label: { Text("清除").foregroundColor(.white) }
-            Button { measure = .none; measurePoints = [] } label: { Text("退出").foregroundColor(AppColor.recording) }
+            // 后退 / 清除 / 退出：间距加大 + 各自加大点击区，避免误触
+            HStack(spacing: 10) {
+                Button { if !measurePoints.isEmpty { measurePoints.removeLast() } } label: {
+                    Image(systemName: "arrow.uturn.backward").foregroundColor(.white)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }.disabled(measurePoints.isEmpty)
+                Button { measurePoints = [] } label: {
+                    Text("清除").foregroundColor(.white)
+                        .frame(width: 52, height: 44).contentShape(Rectangle())
+                }
+                Button { measure = .none; measurePoints = [] } label: {
+                    Text("退出").foregroundColor(AppColor.recording)
+                        .frame(width: 52, height: 44).contentShape(Rectangle())
+                }
+            }
         }
         .font(.subheadline)
-        .padding(.vertical, 10).padding(.horizontal, 14)
+        .padding(.vertical, 6).padding(.leading, 14).padding(.trailing, 6)
         .background(Color.black.opacity(0.78)).cornerRadius(12)
     }
 
@@ -179,45 +191,41 @@ struct MapScreen: View {
             .background(Color.black.opacity(0.72)).cornerRadius(12)
     }
 
-    /// 缩放级别读数（诊断：能看到当前在哪一级；后续可移除）
-    private var zoomReadout: some View {
-        Text(String(format: "缩放 z%.1f", mapCtrl.zoom))
-            .font(.system(size: 11, weight: .medium)).foregroundColor(.white)
-            .padding(.vertical, 3).padding(.horizontal, 10)
-            .background(Color.black.opacity(0.6)).cornerRadius(10)
-    }
-
     /// 缩放 +/- 竖排药丸
     private var zoomGroup: some View {
         VStack(spacing: 0) {
             Button { mapCtrl.zoomIn() } label: {
-                Image(systemName: "plus").font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(AppColor.ink).frame(width: 44, height: 44)
+                Image(systemName: "plus").font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(AppColor.ink).frame(width: 36, height: 36)
             }
-            Rectangle().fill(AppColor.divider).frame(width: 44, height: 1)
+            Rectangle().fill(AppColor.divider).frame(width: 36, height: 1)
             Button { mapCtrl.zoomOut() } label: {
-                Image(systemName: "minus").font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(AppColor.ink).frame(width: 44, height: 44)
+                Image(systemName: "minus").font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(AppColor.ink).frame(width: 36, height: 36)
             }
         }
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
         .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
     }
 
-    /// 缩放滑块（上滑放大 / 下滑缩小，任务 2.3 接真实缩放）
+    /// 缩放滑块（上滑放大 / 下滑缩小）；绿色圆点内显示当前缩放级别（取代原顶部读数）。
     private var zoomSlider: some View {
         ZStack(alignment: .top) {
             Capsule().fill(Color.white.opacity(0.6)).frame(width: 4, height: 110)
-            Circle().fill(AppColor.primary).frame(width: 24, height: 24)
-                .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
-                .offset(y: CGFloat(1 - zoomLevel) * 86)
+            ZStack {
+                Circle().fill(AppColor.primary).frame(width: 30, height: 30)
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                Text(String(format: "%.0f", mapCtrl.zoom))
+                    .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+            }
+            .offset(y: CGFloat(1 - zoomLevel) * 83)
         }
-        .frame(width: 24, height: 110)
+        .frame(width: 30, height: 113)
         .contentShape(Rectangle())
         .gesture(
             DragGesture().onChanged { v in
-                let frac = 1 - Double(v.location.y) / 110
+                let frac = 1 - Double(v.location.y) / 113
                 zoomLevel = min(1, max(0, frac))
                 mapCtrl.setZoom(fraction: zoomLevel)
             }
