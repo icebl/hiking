@@ -16,8 +16,8 @@ struct MapScreen: View {
     @State private var baseMode: MapBaseMode = .onlineRaster
     @State private var showLayerSheet = false
     // 工具箱：测距 / 面积 / 距离雷达
-    enum Measure { case none, distance, area }
-    @State private var measure: Measure = .none
+    enum MeasureMode { case none, distance, area }
+    @State private var measure: MeasureMode = .none
     @State private var measurePoints: [CLLocationCoordinate2D] = []
     @State private var showRadar = false
     @State private var showToolSheet = false
