@@ -4,6 +4,7 @@ import CoreLocation
 /// 轨迹详情（任务 6.2 / 5.6）：地图 / 详情 页签 + 操作（导出/导航）。
 struct TrackDetailView: View {
     let trackId: UUID
+    @Environment(\.dismiss) private var dismiss
     @State private var tab = 0       // 0 地图 / 1 详情
     @State private var track: Track?
     @State private var points: [TrackPoint] = []
