@@ -139,12 +139,16 @@ struct TracksView: View {
 
     private func trackRow(_ t: Track) -> some View {
         NavigationLink(value: t.id) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(t.name).font(.system(size: 15, weight: .semibold))
-                Text(String(format: "%.2f km · ↑%.0f m · %@ · %@",
-                            t.distance / 1000, t.ascent,
-                            t.source == .recorded ? "记录" : "导入", Self.df.string(from: t.createdAt)))
-                    .font(.caption).foregroundColor(AppColor.ink2)
+            HStack(spacing: 12) {
+                // 左侧轨迹形状缩略图（参照 U3）；点数为缓存键
+                TrackThumbnailView(trackId: t.id, pointCount: t.pointCount)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t.name).font(.system(size: 15, weight: .semibold))
+                    Text(String(format: "%.2f km · ↑%.0f m · %@ · %@",
+                                t.distance / 1000, t.ascent,
+                                t.source == .recorded ? "记录" : "导入", Self.df.string(from: t.createdAt)))
+                        .font(.caption).foregroundColor(AppColor.ink2)
+                }
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {

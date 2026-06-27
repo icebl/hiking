@@ -256,6 +256,11 @@ struct TrackDetailView: View {
     private var statsList: some View {
         List {
             if let t = track {
+                // 顶部封面：轨迹形状缩略图（与列表同款，较大）
+                HStack { Spacer()
+                    TrackThumbnailView(trackId: trackId, pointCount: t.pointCount, side: 150, corner: 14)
+                    Spacer() }
+                    .listRowSeparator(.hidden)
                 row("距离", String(format: "%.2f km", t.distance / 1000))
                 row("累计爬升", "\(Int(t.ascent)) m"); row("累计下降", "\(Int(t.descent)) m")
                 row("运动用时", format(t.movingTime)); row("轨迹点数", "\(t.pointCount)")
