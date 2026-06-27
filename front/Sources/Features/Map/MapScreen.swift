@@ -15,6 +15,7 @@ struct MapScreen: View {
     @State private var tappedEle: String = "海拔 查询中…"   // 点击点的海拔（DEM 在线查，异步回填）
     @State private var tappedCoord: CLLocationCoordinate2D? // 点击点坐标，用于地图高亮标记
     @State private var tappedCopied = false                 // 复制经纬度后短暂反馈
+    @State private var pickingCoord = false                 // 取点模式（工具箱启用）：点地图才取经纬度
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1），1=最大
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
@@ -41,9 +42,9 @@ struct MapScreen: View {
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
                          showRoadNetwork: showRoadNetwork, overlays: overlayItems.map(\.coords),
                          onTap: { c in
-                             // 测量进行中：点击落点累积进折线/多边形；否则取经纬度、查海拔并高亮该点
+                             // 测量中→落测量点；取点模式→取经纬度+查海拔+高亮；都不是→忽略点击
                              if measure != .none { measurePoints.append(c) }
-                             else {
+                             else if pickingCoord {
                                  tapped = CoordFormatter.string(c, format: AppSettings.coordFormat)
                                  tappedCoord = c
                                  fetchTappedElevation(c)
@@ -51,9 +52,14 @@ struct MapScreen: View {
                          })
                 .ignoresSafeArea()
 
-            // 信息条：靠上居中（WGS84 浅绿高亮）+ 缩放级别读数（诊断）
+            // 信息条：靠上居中（WGS84 浅绿高亮）；取点模式且未取点时提示点击地图
             VStack(spacing: 6) {
                 infoBar
+                if pickingCoord && tapped == nil {
+                    Text("点击地图取经纬度").font(.caption).foregroundColor(.white)
+                        .padding(.vertical, 5).padding(.horizontal, 12)
+                        .background(AppColor.primary.opacity(0.9)).cornerRadius(10)
+                }
                 Spacer()
             }
             .padding(.top, 6)
@@ -78,7 +84,7 @@ struct MapScreen: View {
                 VStack(spacing: 14) {
                     ctrl("square.3.stack.3d", "图层") { showLayerSheet = true }   // 切底图：在线影像/离线矢量
                     ctrl("square.on.square", "叠加", active: !overlayItems.isEmpty) { showOverlaySheet = true }
-                    ctrl("wrench.and.screwdriver", "工具", active: measure != .none || showRadar) { showToolSheet = true }
+                    ctrl("wrench.and.screwdriver", "工具", active: measure != .none || showRadar || pickingCoord) { showToolSheet = true }
                     Spacer()
                     VStack(spacing: 8) {                       // 缩放：+/- 与滑块同一区
                         zoomGroup
@@ -114,7 +120,7 @@ struct MapScreen: View {
                                 Text(tappedCopied ? "已复制" : "复制")
                             }.foregroundColor(tappedCopied ? Color(hex: 0x7EE0A6) : .white)
                         }
-                        Button { self.tapped = nil; tappedCoord = nil } label: {   // 关闭并移除高亮标记
+                        Button { exitPicking() } label: {   // 关闭：移除高亮标记并退出取点模式
                             Image(systemName: "xmark").foregroundColor(.white.opacity(0.8))
                         }.padding(.leading, 12)
                     }
@@ -145,14 +151,16 @@ struct MapScreen: View {
         // 注：记录/导航页各自管理后台定位，互不影响（最后一次 start 的配置生效）。
         .onAppear { loc.requestWhenInUse(); loc.start(background: false) }
         .onDisappear { loc.stop() }
-        // 工具箱对话框：切换测量模式都会清空已有点并关闭经纬度读数，避免状态串扰
+        // 工具箱对话框：取点/测距/面积三者互斥（都吃点击），切换时互相清理，避免状态串扰
         .confirmationDialog("工具箱", isPresented: $showToolSheet, titleVisibility: .visible) {
-            Button("测距") { measure = .distance; measurePoints = []; tapped = nil }
-            Button("面积") { measure = .area; measurePoints = []; tapped = nil }
+            Button("取点（经纬度）") { measure = .none; measurePoints = []; clearTapped(); pickingCoord = true }
+            Button("测距") { measure = .distance; measurePoints = []; clearTapped(); pickingCoord = false }
+            Button("面积") { measure = .area; measurePoints = []; clearTapped(); pickingCoord = false }
             Button(showRadar ? "关闭距离雷达" : "距离雷达") { showRadar.toggle() }
             if measure != .none { Button("退出测量", role: .destructive) { measure = .none; measurePoints = [] } }
+            if pickingCoord { Button("退出取点", role: .destructive) { exitPicking() } }
             Button("取消", role: .cancel) {}
-        } message: { Text("点击地图连点测量；距离雷达以当前定位为中心显示同心圈") }
+        } message: { Text("取点：点地图取经纬度；测距/面积：连点测量；距离雷达：以定位为中心同心圈") }
         // 底图选择对话框：固定一项在线影像 + 动态列出本地已导入的矢量包
         .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
             Button("在线影像（ESRI，含已缓存离线区域）") { baseMode = .onlineRaster }
@@ -246,12 +254,16 @@ struct MapScreen: View {
         return false
     }
 
-    /// 复制点击点的经纬度（海拔为有效数值时一并带上）到系统剪贴板，并短暂反馈"已复制"。
+    /// 清除当前取点读数与高亮标记（不改变取点模式开关）。
+    private func clearTapped() { tapped = nil; tappedCoord = nil }
+
+    /// 退出取点模式：清读数/高亮 + 关模式（读数条 X 与工具箱「退出取点」共用）。
+    private func exitPicking() { clearTapped(); pickingCoord = false }
+
+    /// 复制点击点的经纬度（仅经纬度，不含海拔）到系统剪贴板，并短暂反馈"已复制"。
     private func copyTapped() {
         guard let tapped else { return }
-        // 海拔在已查到数值时附带；查询中/未知则只复制经纬度
-        let withEle = tappedEle.contains("m") ? "\(tapped) · \(tappedEle)" : tapped
-        UIPasteboard.general.string = withEle
+        UIPasteboard.general.string = tapped
         withAnimation { tappedCopied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             withAnimation { tappedCopied = false }
