@@ -114,6 +114,17 @@ final class AppDatabase {
                 t.add(column: "folderId", .text)   // 关联 folder.id；nil = 未分组
             }
         }
+
+        // v3：自定义排序序号（拖拽排序）。默认 0；列表按 sortOrder 升序、createdAt 倒序兜底，
+        // 即未手动排过的项仍按「最新在前」，拖拽后该组获得显式 0..n 顺序。
+        m.registerMigration("v3_sortOrder") { db in
+            try db.alter(table: "track") { t in
+                t.add(column: "sortOrder", .double).notNull().defaults(to: 0)
+            }
+            try db.alter(table: "folder") { t in
+                t.add(column: "sortOrder", .double).notNull().defaults(to: 0)
+            }
+        }
         return m
     }
 }

@@ -20,6 +20,7 @@ struct TracksView: View {
     @State private var showCreateFolder = false  // 是否弹出新建文件夹 alert
     @State private var newFolderName = ""     // 新建文件夹名称输入框
     @State private var moveTarget: Track?     // 正在移动到文件夹的轨迹，非 nil 即弹选择面板
+    @State private var editMode: EditMode = .inactive  // 列表编辑态：开启后组内轨迹可拖拽排序
 
     private let repo = TrackRepository()      // 数据访问层：轨迹/文件夹的增删改查
 
@@ -63,6 +64,16 @@ struct TracksView: View {
                 Picker("", selection: $segment) {
                     Text("本地").tag(0); Text("云端").tag(1)
                 }.pickerStyle(.segmented).frame(width: 160)
+                // 右侧「管理/完成」：仅本地分段显示，切换拖拽排序编辑态
+                if segment == 0 {
+                    HStack {
+                        Spacer()
+                        Button(editMode.isEditing ? "完成" : "管理") {
+                            withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                        }
+                        .font(.system(size: 15, weight: .semibold)).foregroundColor(AppColor.primary)
+                    }
+                }
             }
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundColor(AppColor.ink2)
@@ -94,6 +105,7 @@ struct TracksView: View {
                 groupSection(title: "未分组", key: "ungrouped", items: ungrouped)
             }
             .listStyle(.plain)
+            .environment(\.editMode, $editMode)   // 编辑态下组内 ForEach 显示拖拽手柄
         }
     }
 
@@ -121,7 +133,9 @@ struct TracksView: View {
                 if items.isEmpty {
                     Text("（空）").font(.caption).foregroundColor(AppColor.ink2)
                 } else {
+                    // 组内拖拽排序：onMove 仅作用于本组 ForEach，天然不跨组（跨组用滑动「移动」）
                     ForEach(items) { trackRow($0) }
+                        .onMove { from, to in moveTracks(items, from: from, to: to) }
                 }
             }
         } header: {
@@ -203,6 +217,14 @@ struct TracksView: View {
         tracks = (try? repo.listTracks()) ?? []
         folders = (try? repo.listFolders()) ?? []
     }
+    /// 组内拖拽排序：把该组当前顺序按拖动结果重排，写回 sortOrder 后刷新。
+    private func moveTracks(_ items: [Track], from: IndexSet, to: Int) {
+        var arr = items
+        arr.move(fromOffsets: from, toOffset: to)
+        try? repo.reorderTracks(arr.map { $0.id })
+        reload()
+    }
+
     /// 软删除轨迹并刷新。
     private func delete(_ t: Track) { try? repo.softDelete(id: t.id); reload() }
     /// 把轨迹移动到目标文件夹（nil 表示移出到未分组）。

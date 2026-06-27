@@ -15,7 +15,8 @@ struct TrackRepository {
             var request = Track.filter(Column("isDeleted") == false)
             let q = search.trimmingCharacters(in: .whitespaces)
             if !q.isEmpty { request = request.filter(Column("name").like("%\(q)%")) }
-            return try request.order(Column("createdAt").desc).fetchAll(dbx)
+            // 自定义序号优先；未排过的（sortOrder 同为 0）按最新在前兜底
+            return try request.order(Column("sortOrder"), Column("createdAt").desc).fetchAll(dbx)
         }
     }
 
@@ -50,6 +51,19 @@ struct TrackRepository {
             try Folder.filter(key: id.uuidString)
                 .updateAll(dbx, Column("isDeleted").set(to: true),
                            Column("isSynced").set(to: false), Column("updatedAt").set(to: Date()))
+        }
+    }
+
+    /// 按给定顺序写入轨迹排序序号（拖拽排序后调用）。orderedIds 为某一组拖拽后的完整顺序，
+    /// 逐个赋 sortOrder = 0..n。分组显示时各组独立按 sortOrder 排，组间序号重复不影响。
+    func reorderTracks(_ orderedIds: [UUID]) throws {
+        try db.dbQueue.write { dbx in
+            for (i, id) in orderedIds.enumerated() {
+                try Track.filter(key: id.uuidString).updateAll(dbx,
+                    Column("sortOrder").set(to: Double(i)),
+                    Column("isSynced").set(to: false),
+                    Column("updatedAt").set(to: Date()))
+            }
         }
     }
 

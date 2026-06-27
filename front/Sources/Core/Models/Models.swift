@@ -28,6 +28,7 @@ struct Track: Codable, Identifiable, Syncable, FetchableRecord, MutablePersistab
     var isSynced: Bool
 
     var folderId: UUID?         // 所属文件夹（nil = 未分组）
+    var sortOrder: Double       // 自定义排序序号（拖拽排序写入；默认 0，列表按它升序+createdAt 倒序兜底）
 
     // 统计（结算后写入；导入时解析）
     var distance: Double        // 米
@@ -49,6 +50,7 @@ struct Track: Codable, Identifiable, Syncable, FetchableRecord, MutablePersistab
         self.createdAt = now; self.updatedAt = now
         self.isDeleted = false; self.isSynced = false
         self.folderId = nil
+        self.sortOrder = 0
         self.distance = 0; self.movingTime = 0; self.totalTime = 0
         self.ascent = 0; self.descent = 0
         self.maxElevation = nil; self.minElevation = nil; self.pointCount = 0
@@ -63,6 +65,7 @@ struct Folder: Codable, Identifiable, Syncable, FetchableRecord, MutablePersista
     var updatedAt: Date
     var isDeleted: Bool
     var isSynced: Bool
+    var sortOrder: Double        // 自定义排序序号（拖拽排序写入）
 
     static let databaseTableName = "folder"
 
@@ -72,6 +75,7 @@ struct Folder: Codable, Identifiable, Syncable, FetchableRecord, MutablePersista
         let now = Date()
         self.createdAt = now; self.updatedAt = now
         self.isDeleted = false; self.isSynced = false
+        self.sortOrder = 0
     }
 }
 

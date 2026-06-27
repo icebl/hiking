@@ -43,45 +43,7 @@ struct TrackDetailView: View {
                 .pickerStyle(.segmented).padding()
 
             if tab == 0 {
-                VStack(spacing: 0) {
-                    ZStack {
-                        MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
-                                     showsUserLocation: true, fitToTrack: true, showKmMarkers: showKm,
-                                     showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
-                                     // 剖面选中点 → 地图高亮坐标（下标越界则不高亮）
-                                     highlightCoordinate: selectedProfileIndex.flatMap {
-                                         profile.indices.contains($0) ? profile[$0].coord : nil },
-                                     showRoadNetwork: showRoadNetwork,
-                                     waypoints: showWaypoints ? waypoints : [],
-                                     centerOn: focusWaypoint.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
-                        MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
-                                           hasProfile: !profile.isEmpty, showProfile: showProfile,
-                                           isVectorBase: isVectorBase, showRoadNetwork: $showRoadNetwork,
-                                           hasWaypoints: !waypoints.isEmpty, showWaypoints: $showWaypoints,
-                                           onPlaceholder: showToast, onLayers: { showLayerSheet = true },
-                                           onContours: { toggleContours() },
-                                           onProfile: {
-                                               // 切换剖面显隐；收起时清除选中点，避免地图残留高亮
-                                               withAnimation { showProfile.toggle() }
-                                               if !showProfile { selectedProfileIndex = nil }
-                                           })
-                        if let toast {
-                            VStack {
-                                Spacer()
-                                Text(toast).font(.caption).foregroundColor(.white)
-                                    .padding(.vertical, 8).padding(.horizontal, 14)
-                                    .background(Color.black.opacity(0.75)).cornerRadius(10)
-                                    .padding(.bottom, 24)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: .infinity)
-                    // 仅有剖面数据且开关打开时，在地图下方拉出剖面（与底部按钮互斥，见下方 if）
-                    if !profile.isEmpty && showProfile {
-                        ElevationProfileView(samples: profile, selected: $selectedProfileIndex)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
+                mapTab
             } else if tab == 1 {
                 statsList
             } else {
@@ -262,6 +224,60 @@ struct TrackDetailView: View {
             showShare = true
         } catch {
             exportError = error.localizedDescription
+        }
+    }
+
+    // MARK: - 地图页（抽成独立属性，避免 body 表达式过大导致编译器类型检查超时）
+
+    /// 剖面拖选点 → 地图高亮坐标（下标越界则 nil 不高亮）。
+    private var highlightCoord: CLLocationCoordinate2D? {
+        guard let i = selectedProfileIndex, profile.indices.contains(i) else { return nil }
+        return profile[i].coord
+    }
+    /// 标注点列表点击的居中目标坐标（nil 表示不居中）。
+    private var centerCoord: CLLocationCoordinate2D? {
+        focusWaypoint.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+    }
+    /// 实际传给地图的航点（「标记点」开关关闭时传空隐藏）。
+    private var shownWaypoints: [Waypoint] { showWaypoints ? waypoints : [] }
+
+    /// 地图页：底图 + 控件 + 提示 + （可选）海拔剖面。
+    private var mapTab: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
+                             showsUserLocation: true, fitToTrack: true, showKmMarkers: showKm,
+                             showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
+                             highlightCoordinate: highlightCoord,
+                             showRoadNetwork: showRoadNetwork,
+                             waypoints: shownWaypoints, centerOn: centerCoord)
+                MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
+                                   hasProfile: !profile.isEmpty, showProfile: showProfile,
+                                   isVectorBase: isVectorBase, showRoadNetwork: $showRoadNetwork,
+                                   hasWaypoints: !waypoints.isEmpty, showWaypoints: $showWaypoints,
+                                   onPlaceholder: showToast, onLayers: { showLayerSheet = true },
+                                   onContours: { toggleContours() },
+                                   onProfile: {
+                                       // 切换剖面显隐；收起时清除选中点，避免地图残留高亮
+                                       withAnimation { showProfile.toggle() }
+                                       if !showProfile { selectedProfileIndex = nil }
+                                   })
+                if let toast {
+                    VStack {
+                        Spacer()
+                        Text(toast).font(.caption).foregroundColor(.white)
+                            .padding(.vertical, 8).padding(.horizontal, 14)
+                            .background(Color.black.opacity(0.75)).cornerRadius(10)
+                            .padding(.bottom, 24)
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity)
+            // 仅有剖面数据且开关打开时，在地图下方拉出剖面（与底部按钮互斥）
+            if !profile.isEmpty && showProfile {
+                ElevationProfileView(samples: profile, selected: $selectedProfileIndex)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
     }
 
