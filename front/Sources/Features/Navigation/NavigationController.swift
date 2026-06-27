@@ -32,6 +32,12 @@ final class NavigationController: ObservableObject {
     private var approachThreshold: Double = 80      // 进入此半径 → 接近提醒（m，读设置）
     private var clearThreshold: Double = 130        // 离开此半径 → 解除，可再次提醒（m，= 接近 + 50 滞回）
 
+    // 语音播报（任务 4.4）：设置页开关控制；偏航/接近/到达即时播报，剩余里程按间隔定时播报
+    private let speaker = SpeechAnnouncer()
+    private var voiceEnabled = false                // 本次导航是否启用语音（start 时读设置固定）
+    private var voiceIntervalSec: TimeInterval = 300 // 剩余里程播报间隔（秒，读设置）
+    private var lastVoiceAt = Date()                // 上次定时播报时刻，控制间隔
+
     /// 启动导航：构建计划线、读阈值设置、订阅定位流。
     /// 参数 trackId 计划轨迹；reverse 是否反向；alsoRecord 是否同时记录实走。前置 !running，防重入。
     func start(trackId: UUID, reverse: Bool, alsoRecord: Bool) {
@@ -45,6 +51,9 @@ final class NavigationController: ObservableObject {
         engine.clearThreshold = max(5, AppSettings.offRouteThreshold - 10) // 滞回解除阈值
         approachThreshold = AppSettings.waypointApproach                  // 读设置：航点接近提醒半径
         clearThreshold = approachThreshold + 50                           // 解除阈值（滞回）
+        voiceEnabled = AppSettings.voiceAlert                             // 读设置：语音播报开关
+        voiceIntervalSec = TimeInterval(max(1, AppSettings.voiceInterval) * 60)
+        lastVoiceAt = Date()                                             // 起点计时，首次播报在一个间隔后
 
         let pts = (try? TrackRepository().points(trackId: trackId)) ?? []
         waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []   // 沿线航点
@@ -64,6 +73,7 @@ final class NavigationController: ObservableObject {
     func stop() {
         running = false
         cancellables.removeAll()
+        speaker.stop()                         // 停止语音并释放音频会话
         if !isRecording { location.stop() }   // 同时记录时由 recorder 收尾停定位
     }
 
@@ -86,8 +96,11 @@ final class NavigationController: ObservableObject {
         let passed = line.cumulativeAscent.indices.contains(idx) ? line.cumulativeAscent[idx] : 0
         remainingAscent = max(0, line.totalAscent - passed)
 
-        // 到达终点仅提示（不自动结束，符合决策）
-        if remainingDistance < arriveThreshold && !arrived { arrived = true }
+        // 到达终点仅提示（不自动结束，符合决策）；首次到达语音播报一次
+        if remainingDistance < arriveThreshold && !arrived {
+            arrived = true
+            announce("已到达终点附近")
+        }
 
         // 偏航跳变：仅在 在线→偏航 的状态翻转瞬间提醒一次，避免持续偏航时反复震动/推送
         if engine.isOffRoute != lastOffRoute {
@@ -97,6 +110,19 @@ final class NavigationController: ObservableObject {
         isOffRoute = engine.isOffRoute
 
         updateWaypointProximity(loc)
+
+        // 定时播报剩余里程：到达后不再播，偏航时也跳过（此刻该听偏航提醒）
+        let nowTime = Date()
+        if voiceEnabled, !arrived, !isOffRoute, nowTime.timeIntervalSince(lastVoiceAt) >= voiceIntervalSec {
+            lastVoiceAt = nowTime
+            announce(String(format: "剩余 %.1f 公里，爬升 %d 米", remainingDistance / 1000, Int(remainingAscent)))
+        }
+    }
+
+    /// 语音播报（仅在本次导航启用语音时）。统一入口，便于各处复用与开关控制。
+    private func announce(_ text: String) {
+        guard voiceEnabled else { return }
+        speaker.speak(text)
     }
 
     /// 沿线航点接近检测：进入 approachThreshold 触发一次提醒，离开 clearThreshold 后可再次提醒（滞回）。
@@ -129,6 +155,7 @@ final class NavigationController: ObservableObject {
         content.sound = .default
         let req = UNNotificationRequest(identifier: "offroute-\(UUID().uuidString)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req)
+        announce("已偏离计划线，距约 \(Int(distance)) 米，请返回")
     }
 
     private func fireWaypointAlert(_ w: Waypoint, distance: Double) {
@@ -139,6 +166,7 @@ final class NavigationController: ObservableObject {
         content.sound = .default
         let req = UNNotificationRequest(identifier: "wp-\(w.id.uuidString)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req)
+        announce("前方约 \(Int(distance)) 米，\(w.kind.label)，\(w.name)")
     }
 
     private func requestNotificationAuth() {

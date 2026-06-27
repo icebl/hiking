@@ -24,6 +24,12 @@ enum AppSettings {
     static var waypointApproach: Double {         // 航点接近提醒半径（米）
         d.object(forKey: "waypointApproach") != nil ? Double(d.integer(forKey: "waypointApproach")) : 80
     }
+    static var voiceAlert: Bool {                 // 导航语音播报开关
+        d.object(forKey: "voiceAlert") != nil ? d.bool(forKey: "voiceAlert") : false
+    }
+    static var voiceInterval: Int {               // 剩余里程定时播报间隔（分钟）
+        d.object(forKey: "voiceInterval") != nil ? d.integer(forKey: "voiceInterval") : 5
+    }
     static var coordFormat: String {              // 坐标格式
         d.string(forKey: "coordFormat") ?? "度 dd.ddddd°"
     }
