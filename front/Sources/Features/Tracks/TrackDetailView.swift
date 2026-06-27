@@ -10,8 +10,9 @@ struct TrackDetailView: View {
     @State private var points: [TrackPoint] = []     // 轨迹原始点序列（经纬度+海拔），用于建剖面/导出
     @State private var waypoints: [Waypoint] = []    // 航点（标注点）列表
     @State private var coords: [CLLocationCoordinate2D] = []  // points 投影出的坐标，供地图画线
-    @State private var exportURL: URL?               // 导出生成的 GPX 临时文件地址
+    @State private var exportURL: URL?               // 导出生成的 GPX/KML 临时文件地址
     @State private var showShare = false             // 是否弹出系统分享面板
+    @State private var showExportDialog = false      // 是否弹出导出格式选择（GPX/KML）
     @State private var exportError: String?          // 导出失败的错误文案，非 nil 即弹错误 alert
     @StateObject private var mapCtrl = MapController()  // 地图控制器：缩放/定位等命令出口
     @State private var showKm = false                // 是否显示每公里里程标
@@ -90,7 +91,7 @@ struct TrackDetailView: View {
             // 标记点页隐藏底部按钮；地图页展开剖面时也隐藏（给剖面让空间）。
             if tab != 2 && !(tab == 0 && showProfile && !profile.isEmpty) {
                 HStack(spacing: 12) {
-                    Button { exportGPX() } label: {
+                    Button { showExportDialog = true } label: {
                         Text("导出").frame(maxWidth: .infinity).frame(height: 52)
                             .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColor.divider))
                     }
@@ -135,6 +136,11 @@ struct TrackDetailView: View {
         }
         .sheet(isPresented: $showShare) {
             if let exportURL { ShareSheet(items: [exportURL]) }
+        }
+        .confirmationDialog("导出格式", isPresented: $showExportDialog, titleVisibility: .visible) {
+            Button("GPX") { export(.gpx) }
+            Button("KML") { export(.kml) }
+            Button("取消", role: .cancel) {}
         }
         .alert("导出失败", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button("好", role: .cancel) {}
@@ -242,11 +248,17 @@ struct TrackDetailView: View {
         return false
     }
 
-    /// 导出 GPX（含航点）→ 系统分享面板（任务 5.5）。
-    private func exportGPX() {
+    /// 导出格式。
+    private enum ExportFormat { case gpx, kml }
+
+    /// 导出轨迹（含航点）为指定格式 → 系统分享面板（任务 5.5）。失败填 exportError 弹错误。
+    private func export(_ format: ExportFormat) {
         guard let track else { return }
         do {
-            exportURL = try GPXService().export(track: track, points: points, waypoints: waypoints)
+            switch format {
+            case .gpx: exportURL = try GPXService().export(track: track, points: points, waypoints: waypoints)
+            case .kml: exportURL = try KMLService.export(track: track, points: points, waypoints: waypoints)
+            }
             showShare = true
         } catch {
             exportError = error.localizedDescription

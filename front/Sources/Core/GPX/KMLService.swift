@@ -165,4 +165,47 @@ final class KMLService: NSObject, XMLParserDelegate {
         // 清理，避免重复结算
         lineStringCoords = ""; pointCoords = ""; gxCoords = []; gxWhens = []
     }
+
+    // MARK: - 导出（KML 2.2）
+    /// 导出为 KML：轨迹作单条 `<LineString>`，航点各作 `<Point>` Placemark → 临时文件 URL，交系统分享。
+    /// 说明：KML 无标准航点类型字段，故 kind 仅写入 `<description>` 供人读，导入回来不还原 kind（GPX 才保留）。
+    /// - Parameters: track 轨迹元信息（取名称）；points 轨迹点；waypoints 航点。
+    static func export(track: Track, points: [TrackPoint], waypoints: [Waypoint]) throws -> URL {
+        // XML 文本转义：& < > 必须转义，否则名称含这些字符会破坏 XML
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;")
+             .replacingOccurrences(of: "<", with: "&lt;")
+             .replacingOccurrences(of: ">", with: "&gt;")
+        }
+        // KML 坐标顺序为 lon,lat[,alt]（与常见 lat,lon 相反）；无海拔则省略第三位
+        func coord(_ lat: Double, _ lon: Double, _ ele: Double?) -> String {
+            ele.map { "\(lon),\(lat),\($0)" } ?? "\(lon),\(lat)"
+        }
+
+        // 轨迹点按 段→序 排序后拼成一条 LineString（KML 单线不分段）
+        let ordered = points.sorted { $0.segment != $1.segment ? $0.segment < $1.segment : $0.seq < $1.seq }
+        let lineCoords = ordered.map { coord($0.lat, $0.lon, $0.elevation) }.joined(separator: " ")
+
+        var kml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+        <Document>
+        <name>\(esc(track.name))</name>
+        <Placemark>
+        <name>\(esc(track.name))</name>
+        <LineString><tessellate>1</tessellate><coordinates>\(lineCoords)</coordinates></LineString>
+        </Placemark>
+        """
+        // 航点：每个一个 Point Placemark，类型与备注写进 description
+        for w in waypoints {
+            let desc = esc(w.kind.label) + (w.note.map { "：" + esc($0) } ?? "")
+            kml += "\n<Placemark><name>\(esc(w.name))</name><description>\(desc)</description>"
+                + "<Point><coordinates>\(coord(w.lat, w.lon, w.elevation))</coordinates></Point></Placemark>"
+        }
+        kml += "\n</Document>\n</kml>\n"
+
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("\(track.name).kml")
+        try kml.write(to: tmp, atomically: true, encoding: .utf8)
+        return tmp   // 交给系统分享面板
+    }
 }
