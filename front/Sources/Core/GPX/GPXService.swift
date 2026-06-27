@@ -36,13 +36,15 @@ struct GPXService {
             var pts: [TrackPoint] = []
             var hasTime = false, hasEle = false
             var seq = 0   // 全段连续递增，跨 segment 不重置，保证点序唯一
+            // 同一条轨迹各点共用一个占位 trackId（保持组内一致；真正 trackId 由 save() 统一覆盖为 track.id）
+            let tid = UUID()
             // segIdx 记录原始段号，用于导出时还原 <trkseg> 分段
             for (segIdx, seg) in trk.segments.enumerated() {
                 for tp in seg.points {
                     guard let lat = tp.latitude, let lon = tp.longitude else { continue }   // 经纬度缺失则跳过该点
                     if tp.time != nil { hasTime = true }
                     if tp.elevation != nil { hasEle = true }
-                    pts.append(TrackPoint(id: nil, trackId: UUID(), segment: segIdx, seq: seq,
+                    pts.append(TrackPoint(id: nil, trackId: tid, segment: segIdx, seq: seq,
                                           lat: lat, lon: lon, elevation: tp.elevation,
                                           timestamp: tp.time, speed: nil, horizontalAccuracy: nil))
                     seq += 1

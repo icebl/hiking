@@ -118,6 +118,8 @@ final class KMLService: NSObject, XMLParserDelegate {
         var pts: [TrackPoint] = []
         var hasTime = false, hasEle = false
         var seq = 0
+        // 同一 Placemark 各点共用一个占位 trackId（组内一致；真正 trackId 由 save() 覆盖为 track.id）
+        let tid = UUID()
 
         // 三选一优先级：LineString（普通路线） > gx:Track（含时间轨迹） > Point（单点航点）
         if !lineStringCoords.isEmpty {
@@ -127,7 +129,7 @@ final class KMLService: NSObject, XMLParserDelegate {
                 guard c.count >= 2 else { continue }   // 不足经纬度则跳过
                 let ele: Double? = c.count >= 3 ? c[2] : nil
                 if ele != nil { hasEle = true }
-                pts.append(TrackPoint(id: nil, trackId: UUID(), segment: 0, seq: seq,
+                pts.append(TrackPoint(id: nil, trackId: tid, segment: 0, seq: seq,
                                       lat: c[1], lon: c[0], elevation: ele, timestamp: nil,
                                       speed: nil, horizontalAccuracy: nil))
                 seq += 1
@@ -137,7 +139,7 @@ final class KMLService: NSObject, XMLParserDelegate {
                 if c.ele != nil { hasEle = true }
                 let t = i < gxWhens.count ? gxWhens[i] : nil   // 时间按下标与坐标对齐，缺失则无时间
                 if t != nil { hasTime = true }
-                pts.append(TrackPoint(id: nil, trackId: UUID(), segment: 0, seq: seq,
+                pts.append(TrackPoint(id: nil, trackId: tid, segment: 0, seq: seq,
                                       lat: c.lat, lon: c.lon, elevation: c.ele, timestamp: t,
                                       speed: nil, horizontalAccuracy: nil))
                 seq += 1
