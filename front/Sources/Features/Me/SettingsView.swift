@@ -51,6 +51,7 @@ struct SettingsView: View {
             Section("通用") {
                 Picker("坐标格式", selection: $dCoord) {
                     Text("度 dd.ddddd°").tag("度 dd.ddddd°")
+                    Text("十进制 lat, lon").tag("十进制 lat, lon")
                     Text("度分秒 DMS").tag("度分秒 DMS")
                     Text("UTM").tag("UTM")
                 }

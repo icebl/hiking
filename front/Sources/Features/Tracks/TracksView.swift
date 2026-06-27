@@ -26,6 +26,7 @@ struct TracksView: View {
     @State private var showBatchDelete = false         // 批量删除确认
     @State private var shareURLs: [URL] = []           // 批量导出生成的文件，交系统分享
     @State private var showShare = false               // 是否弹出系统分享面板
+    @State private var toast: String?                  // 轻提示（如未选轨迹），短暂显示
 
     private let repo = TrackRepository()      // 数据访问层：轨迹/文件夹的增删改查
 
@@ -35,6 +36,15 @@ struct TracksView: View {
             if segment == 0 { localList } else { cloudPlaceholder }
             // 编辑态显示批量操作条，否则显示常规导入/新建按钮
             if editMode.isEditing && segment == 0 { batchBar } else { bottomBar }
+        }
+        // 轻提示浮层（如「请先选择轨迹」），悬浮在底部操作条上方
+        .overlay(alignment: .bottom) {
+            if let toast {
+                Text(toast).font(.caption).foregroundColor(.white)
+                    .padding(.vertical, 8).padding(.horizontal, 16)
+                    .background(Color.black.opacity(0.78)).cornerRadius(12)
+                    .padding(.bottom, 80).transition(.opacity)
+            }
         }
         .navigationBarHidden(true)
         .navigationDestination(for: UUID.self) { TrackDetailView(trackId: $0) }
@@ -119,16 +129,25 @@ struct TracksView: View {
                 Text("没有匹配「\(search)」的轨迹").foregroundColor(AppColor.ink2)
                 Spacer()
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if editMode.isEditing {
+            // 编辑态：带 selection 的 List（多选批量 + 拖拽排序）
+            List(selection: $selectedIDs) { groupsBody }
+                .listStyle(.plain)
+                .environment(\.editMode, $editMode)
         } else {
-            List(selection: $selectedIDs) {       // 编辑态下提供多选（选中态=批量操作目标）
-                ForEach(folders) { f in
-                    groupSection(title: f.name, key: f.id.uuidString, items: tracksIn(f.id))
-                }
-                groupSection(title: "未分组", key: "ungrouped", items: ungrouped)
-            }
-            .listStyle(.plain)
-            .environment(\.editMode, $editMode)   // 编辑态下组内 ForEach 显示拖拽手柄 + 选择圈
+            // 正常态：不带 selection，保证行点击触发 NavigationLink 跳转详情
+            // （List(selection:) 会把点击当作选中高亮而吞掉导航，故两态分开）
+            List { groupsBody }
+                .listStyle(.plain)
         }
+    }
+
+    /// 列表分组内容（文件夹各组 + 未分组），编辑/正常两种 List 复用。
+    @ViewBuilder private var groupsBody: some View {
+        ForEach(folders) { f in
+            groupSection(title: f.name, key: f.id.uuidString, items: tracksIn(f.id))
+        }
+        groupSection(title: "未分组", key: "ungrouped", items: ungrouped)
     }
 
     private var emptyState: some View {
@@ -219,26 +238,35 @@ struct TracksView: View {
         }.padding(.horizontal, 16).padding(.vertical, 10)
     }
 
-    /// 批量操作条（编辑态显示）：全选/全不选 + 删除 / 移动 / 导出，均作用于 selectedIDs。
-    /// 无选中时三项操作禁用。
+    /// 批量操作条（编辑态显示）：全选/全不选 + 导出 / 移动 / 删除，均作用于 selectedIDs。
+    /// 保持可点：未选中时给 toast 提示，而非静默禁用（避免"点了没反应"）。
     private var batchBar: some View {
-        let none = selectedIDs.isEmpty
-        return HStack(spacing: 0) {
+        HStack(spacing: 0) {
             // 全选：未全选则选中全部可见轨迹，已全选则清空
             Button {
                 let ids = Set(shown.map { $0.id })
                 selectedIDs = (selectedIDs.count == ids.count && !ids.isEmpty) ? [] : ids
             } label: { batchItem("checklist", selectedIDs.count == shown.count && !shown.isEmpty ? "全不选" : "全选") }
 
-            Button { showBatchExport() } label: { batchItem("square.and.arrow.up", "导出") }
-                .disabled(none)
-            Button { showBatchMove = true } label: { batchItem("folder", "移动") }
-                .disabled(none)
-            Button { showBatchDelete = true } label: { batchItem("trash", "删除", tint: AppColor.recording) }
-                .disabled(none)
+            Button { requireSelection { showBatchExport() } } label: { batchItem("square.and.arrow.up", "导出") }
+            Button { requireSelection { showBatchMove = true } } label: { batchItem("folder", "移动") }
+            Button { requireSelection { showBatchDelete = true } } label: { batchItem("trash", "删除", tint: AppColor.recording) }
         }
         .padding(.horizontal, 8).padding(.vertical, 8)
         .overlay(Divider(), alignment: .top)
+    }
+
+    /// 有选中才执行操作，否则提示先选择（统一三个批量按钮的空选行为）。
+    private func requireSelection(_ action: () -> Void) {
+        if selectedIDs.isEmpty { showToast("请先选择轨迹") } else { action() }
+    }
+
+    /// 轻提示：显示一句话并 1.5s 后自动消失。
+    private func showToast(_ msg: String) {
+        withAnimation { toast = msg }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { if toast == msg { toast = nil } }
+        }
     }
 
     /// 批量条单项：图标 + 文字，禁用时变灰由 .disabled + opacity 体现。

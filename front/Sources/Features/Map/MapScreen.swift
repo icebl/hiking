@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import CoreLocation
 
 /// 地图（全屏沉浸，任务 2.x）：底图 + 悬浮控件 + 居中信息条 + 底部记录/导航 + 点击取经纬度。
@@ -12,6 +13,8 @@ struct MapScreen: View {
     @State private var showRecording = false               // 是否弹出全屏「记录」页
     @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）；nil 表示未点/已关闭
     @State private var tappedEle: String = "海拔 查询中…"   // 点击点的海拔（DEM 在线查，异步回填）
+    @State private var tappedCoord: CLLocationCoordinate2D? // 点击点坐标，用于地图高亮标记
+    @State private var tappedCopied = false                 // 复制经纬度后短暂反馈
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1），1=最大
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
@@ -36,10 +39,15 @@ struct MapScreen: View {
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
                          showRoadNetwork: showRoadNetwork, overlays: overlayItems.map(\.coords),
+                         highlightCoordinate: tappedCoord,   // 点击点的高亮标记（橙点，区别于航点）
                          onTap: { c in
-                             // 测量进行中：点击落点累积进折线/多边形；否则取经纬度并异步查该点海拔
+                             // 测量进行中：点击落点累积进折线/多边形；否则取经纬度、查海拔并高亮该点
                              if measure != .none { measurePoints.append(c) }
-                             else { tapped = CoordFormatter.string(c, format: AppSettings.coordFormat); fetchTappedElevation(c) }
+                             else {
+                                 tapped = CoordFormatter.string(c, format: AppSettings.coordFormat)
+                                 tappedCoord = c
+                                 fetchTappedElevation(c)
+                             }
                          })
                 .ignoresSafeArea()
 
@@ -99,9 +107,16 @@ struct MapScreen: View {
                         + Text(tapped).foregroundColor(Color(hex: 0x7EE0A6)).bold()
                         + Text(" · \(tappedEle)").foregroundColor(.white)
                         Spacer()
-                        Button { self.tapped = nil } label: {
-                            Image(systemName: "xmark").foregroundColor(.white.opacity(0.8))
+                        // 复制：把经纬度(含海拔)写入剪贴板，便于粘到微信/备忘录
+                        Button { copyTapped() } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: tappedCopied ? "checkmark" : "doc.on.doc")
+                                Text(tappedCopied ? "已复制" : "复制")
+                            }.foregroundColor(tappedCopied ? Color(hex: 0x7EE0A6) : .white)
                         }
+                        Button { self.tapped = nil; tappedCoord = nil } label: {   // 关闭并移除高亮标记
+                            Image(systemName: "xmark").foregroundColor(.white.opacity(0.8))
+                        }.padding(.leading, 12)
                     }
                     .font(.caption)
                     .padding(.vertical, 10).padding(.horizontal, 14)
@@ -229,6 +244,18 @@ struct MapScreen: View {
     private var isVectorBase: Bool {
         if case .offlineVector = baseMode { return true }
         return false
+    }
+
+    /// 复制点击点的经纬度（海拔为有效数值时一并带上）到系统剪贴板，并短暂反馈"已复制"。
+    private func copyTapped() {
+        guard let tapped else { return }
+        // 海拔在已查到数值时附带；查询中/未知则只复制经纬度
+        let withEle = tappedEle.contains("m") ? "\(tapped) · \(tappedEle)" : tapped
+        UIPasteboard.general.string = withEle
+        withAnimation { tappedCopied = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation { tappedCopied = false }
+        }
     }
 
     /// 异步查询点击点的海拔（在线 DEM）：先显示"查询中"，得到结果回填米数或"未知"。

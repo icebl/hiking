@@ -6,10 +6,17 @@ enum CoordFormatter {
     /// 按格式名分派；format 取自 AppSettings.coordFormat，无匹配则回落十进制度。
     static func string(_ c: CLLocationCoordinate2D, format: String) -> String {
         switch format {
-        case "度分秒 DMS": return dms(c)
-        case "UTM":        return utm(c)
-        default:           return decimal(c)
+        case "度分秒 DMS":   return dms(c)
+        case "UTM":         return utm(c)
+        case "十进制 lat, lon": return decimalPlain(c)
+        default:            return decimal(c)
         }
+    }
+
+    /// 纯十进制 "纬度, 经度"：英文逗号+空格分隔，带符号、无 °/N/E，便于粘到地图类 App。
+    /// 例：41.69500, 123.34430
+    static func decimalPlain(_ c: CLLocationCoordinate2D) -> String {
+        String(format: "%.5f, %.5f", c.latitude, c.longitude)
     }
 
     /// 度：41.69500°N 123.34430°E
