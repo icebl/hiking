@@ -8,6 +8,7 @@ import CoreLocation
 struct MapScreen: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var mapCtrl = MapController()      // 地图实例与缩放/定位状态的桥接控制器
+    @ObservedObject private var loc = LocationManager.shared  // 实时定位（驱动顶部信息条经纬度/海拔）
     @State private var showRecording = false               // 是否弹出全屏「记录」页
     @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）；nil 表示未点/已关闭
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1），1=最大
@@ -119,6 +120,10 @@ struct MapScreen: View {
             }
         }
         .fullScreenCover(isPresented: $showRecording) { RecordingView() }
+        // 进入主地图即前台定位（驱动信息条实时经纬度/海拔）；离开页面停止以省电。
+        // 注：记录/导航页各自管理后台定位，互不影响（最后一次 start 的配置生效）。
+        .onAppear { loc.requestWhenInUse(); loc.start(background: false) }
+        .onDisappear { loc.stop() }
         // 工具箱对话框：切换测量模式都会清空已有点并关闭经纬度读数，避免状态串扰
         .confirmationDialog("工具箱", isPresented: $showToolSheet, titleVisibility: .visible) {
             Button("测距") { measure = .distance; measurePoints = []; tapped = nil }
@@ -191,9 +196,18 @@ struct MapScreen: View {
     }
 
     /// 顶部信息条：坐标系标识 + 示例经纬度/海拔（当前为占位静态文案，待接入实时定位）。
+    /// 顶部信息条：WGS84 标签 + 实时经纬度/海拔；定位未就绪时显示「定位中…」。
+    /// 经纬度恒用十进制度（与 WGS84 标签匹配，紧凑不溢出）；海拔取 GPS 椭球高，单位米。
     private var infoBar: some View {
-        (Text("WGS84").foregroundColor(Color(hex: 0x7EE0A6)).fontWeight(.bold)
-         + Text(" 41.6950°N 123.3443°E · 海拔39m").foregroundColor(.white))
+        let prefix = Text("WGS84").foregroundColor(Color(hex: 0x7EE0A6)).fontWeight(.bold)
+        let body: Text = {
+            if let l = loc.location {
+                return Text(" \(CoordFormatter.decimal(l.coordinate)) · 海拔\(Int(l.altitude))m")
+                    .foregroundColor(.white)
+            }
+            return Text(" 定位中…").foregroundColor(.white)
+        }()
+        return (prefix + body)
             .font(.system(size: 11.5, weight: .medium))
             .padding(.vertical, 6).padding(.horizontal, 14)
             .background(Color.black.opacity(0.72)).cornerRadius(12)

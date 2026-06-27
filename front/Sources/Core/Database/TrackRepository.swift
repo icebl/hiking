@@ -200,9 +200,14 @@ struct TrackRepository {
     }
 
     /// 本月累计（首页数据卡，任务 6.1）：返回（轨迹数, 总里程米, 总爬升米）。
+    /// 仅统计 createdAt 落在「当前自然月」（同年同月）的未删除轨迹；在内存按月过滤，
+    /// 避免依赖 GRDB 的 Date 存储格式做 SQL 区间比较。
     func monthlySummary() throws -> (count: Int, distance: Double, ascent: Double) {
-        // TODO(6.1): 按当前月份聚合统计——当前为占位实现，实际统计的是全部轨迹而非本月。
-        let tracks = try listTracks()
+        let cal = Calendar.current
+        let now = Date()
+        let tracks = try listTracks().filter {
+            cal.isDate($0.createdAt, equalTo: now, toGranularity: .month)
+        }
         return (tracks.count,
                 tracks.reduce(0) { $0 + $1.distance },
                 tracks.reduce(0) { $0 + $1.ascent })
