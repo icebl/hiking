@@ -2,10 +2,11 @@ import SwiftUI
 
 /// 首页（任务 6.1）：累计数据卡 + 快捷入口 + 活动·公告区（联网，P1）。
 struct HomeView: View {
-    var openMap: () -> Void
+    var openMap: () -> Void   // 跳转地图页的回调（由父级 Tab 容器注入）
+    // 本月汇总：轨迹条数 / 累计里程(米) / 累计爬升(米)；初值全 0，task 中查库填充
     @State private var summary: (count: Int, distance: Double, ascent: Double) = (0, 0, 0)
-    @State private var showRecording = false
-    @State private var showOffline = false
+    @State private var showRecording = false   // 是否弹出全屏记录页
+    @State private var showOffline = false     // 是否跳转离线地图页
 
     var body: some View {
         NavigationStack {
@@ -14,7 +15,7 @@ struct HomeView: View {
                     Text("本月").font(.caption).foregroundColor(AppColor.ink2)
                     HStack {
                         stat("\(summary.count)", "轨迹")
-                        Spacer(); stat(String(format: "%.1f", summary.distance / 1000), "里程 km")
+                        Spacer(); stat(String(format: "%.1f", summary.distance / 1000), "里程 km")  // 米→公里
                         Spacer(); stat("\(Int(summary.ascent))", "爬升 m")
                     }
                     .padding().background(Color.white).cornerRadius(AppRadius.card)
@@ -45,6 +46,7 @@ struct HomeView: View {
             .navigationTitle("路迹")
             .navigationDestination(isPresented: $showOffline) { OfflineMapsView() }
             .fullScreenCover(isPresented: $showRecording) { RecordingView() }
+            // 进入页面时查本月汇总；查询失败兜底为全 0，避免卡空白
             .task { summary = (try? TrackRepository().monthlySummary()) ?? (0, 0, 0) }
         }
     }

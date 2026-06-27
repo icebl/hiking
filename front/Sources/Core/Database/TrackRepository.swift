@@ -2,8 +2,11 @@ import Foundation
 import GRDB
 
 /// 轨迹仓储：增删改查 + 批量写点 + 列表（任务 1.4 / 1.5）。
+/// 上层（记录/导入/详情等 ViewModel）唯一的持久化入口，屏蔽 GRDB 细节；
+/// 删除统一走软删（isDeleted=true + isSynced=false），为三期云同步保留删除态。
 struct TrackRepository {
     let db: AppDatabase
+    // 默认复用全局单例连接；测试时可注入独立内存库。
     init(db: AppDatabase = .shared) { self.db = db }
 
     // 轨迹列表（未删除，按创建时间倒序）；search 非空时按名称过滤。
@@ -64,10 +67,12 @@ struct TrackRepository {
     }
 
     /// 保存轨迹并批量写入轨迹点（结算/导入共用）。
+    /// 单事务内完成：先存轨迹行，再逐点/逐航点回填 trackId 后写入，保证整体原子性。
     func save(track: Track, points: [TrackPoint], waypoints: [Waypoint] = []) throws {
         try db.dbQueue.write { dbx in
             var t = track; t.updatedAt = Date()
             try t.save(dbx)
+            // 强制改写 trackId，防止调用方传入的点/航点关联到错误轨迹。
             for var p in points { p.trackId = track.id; try p.insert(dbx) }
             for var w in waypoints { w.trackId = track.id; try w.save(dbx) }
         }
@@ -129,6 +134,7 @@ struct TrackRepository {
         _ = try db.dbQueue.write { dbx in try Track.filter(key: id.uuidString).deleteAll(dbx) }
     }
 
+    /// 取某轨迹全部点，按 段→序 升序，使连线顺序与采集顺序一致。
     func points(trackId: UUID) throws -> [TrackPoint] {
         try db.dbQueue.read { dbx in
             try TrackPoint
@@ -138,6 +144,7 @@ struct TrackRepository {
         }
     }
 
+    /// 取某轨迹未删除的航点，按创建时间升序（与打点先后一致）。
     func waypoints(trackId: UUID) throws -> [Waypoint] {
         try db.dbQueue.read { dbx in
             try Waypoint
@@ -192,9 +199,9 @@ struct TrackRepository {
         }
     }
 
-    // 本月累计（首页数据卡，任务 6.1）
+    /// 本月累计（首页数据卡，任务 6.1）：返回（轨迹数, 总里程米, 总爬升米）。
     func monthlySummary() throws -> (count: Int, distance: Double, ascent: Double) {
-        // TODO(6.1): 按当前月份聚合统计
+        // TODO(6.1): 按当前月份聚合统计——当前为占位实现，实际统计的是全部轨迹而非本月。
         let tracks = try listTracks()
         return (tracks.count,
                 tracks.reduce(0) { $0 + $1.distance },

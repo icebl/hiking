@@ -12,8 +12,8 @@ struct ElevSample: Identifiable {
 
 /// 海拔剖面图（任务 5.6）：距离-海拔折线 + 拖动选点（联动地图高亮）。
 struct ElevationProfileView: View {
-    let samples: [ElevSample]
-    @Binding var selected: Int?
+    let samples: [ElevSample]          // 下采样后的剖面点（由 TrackDetailView 传入）
+    @Binding var selected: Int?        // 选中采样下标（双向绑定，拖动更新→父视图地图高亮）
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -57,6 +57,7 @@ struct ElevationProfileView: View {
     }
 
     private var chart: some View {
+        // 面积图基线取 Y 轴下界（而非 0），让填充贴合自适应后的可视范围
         let base = yDomain.lowerBound
         return Chart {
             ForEach(samples) { s in
@@ -68,6 +69,7 @@ struct ElevationProfileView: View {
                     .foregroundStyle(AppColor.contour)
                     .interpolationMethod(.monotone)
             }
+            // 有选中点时画竖直标线 + 圆点，与地图高亮形成联动
             if let i = selected, samples.indices.contains(i) {
                 RuleMark(x: .value("选中", samples[i].d)).foregroundStyle(AppColor.ink2.opacity(0.5))
                 PointMark(x: .value("距离", samples[i].d), y: .value("海拔", samples[i].ele))
@@ -77,18 +79,20 @@ struct ElevationProfileView: View {
         .chartYScale(domain: yDomain)
         .chartYAxis { AxisMarks(position: .leading) }
         .frame(height: 96)
+        // 覆盖透明层捕获拖动：把手指 x 像素换算成距离值，再就近吸附到采样点
         .chartOverlay { proxy in
             GeometryReader { geo in
                 Rectangle().fill(Color.clear).contentShape(Rectangle())
                     .gesture(DragGesture(minimumDistance: 0).onChanged { v in
                         let origin = geo[proxy.plotAreaFrame].origin
-                        let x = v.location.x - origin.x
+                        let x = v.location.x - origin.x   // 减去绘图区原点，得到相对绘图区的 x
                         if let d: Double = proxy.value(atX: x) { selected = nearestIndex(to: d) }
                     })
             }
         }
     }
 
+    /// 找出累计距离最接近 d 的采样下标（线性扫描，返回 id）。
     private func nearestIndex(to d: Double) -> Int? {
         guard !samples.isEmpty else { return nil }
         var best = 0, bestDiff = Double.greatestFiniteMagnitude

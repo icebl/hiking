@@ -47,8 +47,10 @@ struct MapLibreView: UIViewRepresentable {
     var initialCenter = CLLocationCoordinate2D(latitude: 41.80, longitude: 123.43)  // 默认沈阳
     var initialZoom: Double = 11
 
+    /// 创建 Coordinator（持有可变状态、充当 MLNMapView 的 delegate）。
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    /// 首次构建底层 MLNMapView：设 delegate、初始 style、定位/朝向、隐藏官方角标、初始相机，按需挂点击手势。
     func makeUIView(context: Context) -> MLNMapView {
         let map = MLNMapView(frame: .zero)
         map.delegate = context.coordinator
@@ -68,9 +70,11 @@ struct MapLibreView: UIViewRepresentable {
         return map
     }
 
+    /// SwiftUI 入参变化时同步到地图：刷新 Coordinator 的 parent/coords，必要时换底图 style，
+    /// 再逐一驱动各叠加层(轨迹/公里标/等高线/高亮/测量/雷达/路网/航点/居中)更新。
     func updateUIView(_ map: MLNMapView, context: Context) {
         let coord = context.coordinator
-        coord.parent = self
+        coord.parent = self                          // 回填最新 parent，使各 update 取到最新入参
         coord.coords = trackCoordinates
         if coord.lastBaseMode != baseMode {          // 底图切换 → 换 style（didFinishLoading 重建图层）
             coord.lastBaseMode = baseMode
@@ -105,12 +109,14 @@ struct MapLibreView: UIViewRepresentable {
     }
 
     // MARK: - Coordinator
+    /// 地图协调器：持有跨刷新存活的可变状态，并作为 MLNMapView 的 delegate 响应样式加载/缩放/点击等事件。
+    /// 与 MapLibreView(值类型) 配合——parent 每次 update 回填，可变图层/标注状态留在此类避免重复创建。
     final class Coordinator: NSObject, MLNMapViewDelegate {
-        var parent: MapLibreView
-        var coords: [CLLocationCoordinate2D]
-        var lastBaseMode: MapBaseMode = .onlineRaster
-        private var trackSource: MLNShapeSource?
-        private var didFit = false
+        var parent: MapLibreView                 // 最新的 SwiftUI 配置快照（每次 updateUIView 回填）
+        var coords: [CLLocationCoordinate2D]     // 当前轨迹坐标（WGS-84），驱动折线/箭头/公里标
+        var lastBaseMode: MapBaseMode = .onlineRaster   // 上次底图模式，与新值比较以判断是否需换 style
+        private var trackSource: MLNShapeSource? // 轨迹折线数据源；样式重载后置 nil 触发重建
+        private var didFit = false               // 是否已把相机框到轨迹范围（fitToTrack 仅做一次）
         private var endpointsAdded = false      // 起终点为标注(跨样式重载存活)，只加一次
 
         init(_ parent: MapLibreView) {
@@ -147,6 +153,7 @@ struct MapLibreView: UIViewRepresentable {
         }
 
         // 自定义标注：用户位置朝向箭头 / 起终点（圆 + 起·终 文字）
+        // 按标注具体类型分派到对应自定义视图；返回 nil 表示用 MapLibre 默认样式。
         func mapView(_ mapView: MLNMapView, viewFor annotation: MLNAnnotation) -> MLNAnnotationView? {
             if annotation is MLNUserLocation { return HeadingUserLocationView() }
             if let e = annotation as? EndpointAnnotation { return EndpointMarkerView(isStart: e.isStart) }
@@ -208,7 +215,7 @@ struct MapLibreView: UIViewRepresentable {
             fitIfNeeded(on: map)
         }
 
-        private var arrowZoomBucket = -100
+        private var arrowZoomBucket = -100   // 上次重建箭头时的整数缩放档；与当前档相同则跳过重建（去抖）
 
         /// 方向箭头：方向用线段方位角(同向)，**密度随缩放变化**——约每 80 屏幕像素一个，
         /// 放大→间隔变小→箭头变多。按整数缩放分桶，仅变化时重建。
@@ -230,6 +237,8 @@ struct MapLibreView: UIViewRepresentable {
             let mpp = 156543.03392 * cos(lat * .pi / 180) / pow(2.0, zoom)
             let interval = max(40.0, mpp * 80)
 
+            // 沿轨迹按等弧长(interval 米)采样箭头点：acc 累计已走米数，nextAt 下一个箭头的里程阈值；
+            // 在跨越阈值的线段上按比例 t 插值出箭头坐标，并记录该段方位角 b。
             var feats: [MLNPointFeature] = []
             var acc = 0.0, nextAt = interval
             for i in 1..<coords.count {
@@ -279,8 +288,8 @@ struct MapLibreView: UIViewRepresentable {
             return (deg + 360).truncatingRemainder(dividingBy: 360)
         }
 
-        private var kmAnnotations: [MLNAnnotation] = []
-        private var highlightAnnotation: HighlightAnnotation?
+        private var kmAnnotations: [MLNAnnotation] = []          // 已添加的公里标，用于增量显示/移除
+        private var highlightAnnotation: HighlightAnnotation?    // 剖面联动高亮点（至多一个，复用其坐标）
 
         /// 海拔剖面联动高亮点（任务 5.6）：随选中坐标移动/增删。
         func updateHighlight(on map: MLNMapView) {
@@ -292,10 +301,11 @@ struct MapLibreView: UIViewRepresentable {
             else { let a = HighlightAnnotation(); a.coordinate = c; map.addAnnotation(a); highlightAnnotation = a }
         }
 
-        private static let measurePurple = UIColor(red: 0.49, green: 0.36, blue: 0.99, alpha: 1)
-        private var radarAnnotations: [MLNAnnotation] = []
+        private static let measurePurple = UIColor(red: 0.49, green: 0.36, blue: 0.99, alpha: 1)  // 测量线/顶点紫
+        private var radarAnnotations: [MLNAnnotation] = []   // 雷达半径文字标注，更新时整批移除重建
 
         /// 测距折线 / 面积多边形 + 顶点（工具箱）。
+        /// 每次全量重建：先移除旧的填充/线/顶点层与源，再按当前点数重新生成（点数变动频繁，重建比增量简单可靠）。
         func updateMeasure(on map: MLNMapView) {
             guard let style = map.style else { return }
             ["measure-fill-layer", "measure-line-layer", "measure-pts-layer"].forEach {
@@ -342,6 +352,7 @@ struct MapLibreView: UIViewRepresentable {
         }
 
         /// 距离雷达：以当前定位为心的同心距离圈 + 半径标注。
+        /// 先清旧圈与标注；关闭或无定位则止于清理。圆心取实时定位，故每次刷新都重建以跟随移动。
         func updateRadar(on map: MLNMapView) {
             guard let style = map.style else { return }
             if let l = style.layer(withIdentifier: "radar-layer") { style.removeLayer(l) }
@@ -349,7 +360,7 @@ struct MapLibreView: UIViewRepresentable {
             if !radarAnnotations.isEmpty { map.removeAnnotations(radarAnnotations); radarAnnotations = [] }
             guard parent.showRadar, let c = LocationManager.shared.location?.coordinate else { return }
 
-            let radii: [Double] = [200, 500, 1000, 2000]
+            let radii: [Double] = [200, 500, 1000, 2000]   // 同心圈半径（米）
             let rings = radii.map { r -> MLNPolylineFeature in
                 var pts = Measure.ring(center: c, radius: r)
                 return MLNPolylineFeature(coordinates: &pts, count: UInt(pts.count))
@@ -373,9 +384,11 @@ struct MapLibreView: UIViewRepresentable {
         }
 
         /// 公里标：每 1km 一个里程碑（深色圆+白数字）。用标注视图（不依赖字体 glyphs）。开关。
+        /// show=true：若尚未添加则沿轨迹按整公里插值布点；show=false：移除已有标注。
         func updateKmMarkers(on map: MLNMapView, show: Bool) {
             if show {
                 guard kmAnnotations.isEmpty, coords.count > 1 else { return }   // 已显示则不重复添加
+                // 与箭头同法的等弧长采样：acc 累计米数，每跨过 nextKm*1000 米就插值一个公里标。
                 var anns: [MLNAnnotation] = []
                 var acc = 0.0, nextKm = 1.0
                 for i in 1..<coords.count {
@@ -412,8 +425,8 @@ struct MapLibreView: UIViewRepresentable {
             layer.isVisible = parent.showRoadNetwork
         }
 
-        private var waypointAnnotations: [MLNAnnotation] = []
-        private var waypointSig: [String] = []
+        private var waypointAnnotations: [MLNAnnotation] = []   // 当前航点标注实例
+        private var waypointSig: [String] = []                  // 上次航点签名集，用于变化检测（去重）
 
         /// 航点标注：按 (id|kind|name) 签名去重，仅在变化时重建（避免每次 update 闪烁/重复）。
         func updateWaypoints(on map: MLNMapView) {
@@ -435,9 +448,10 @@ struct MapLibreView: UIViewRepresentable {
             waypointAnnotations = anns
         }
 
-        private var lastCenter: CLLocationCoordinate2D?
+        private var lastCenter: CLLocationCoordinate2D?   // 上次居中坐标，去重避免每次 update 都重复居中
 
         /// 居中到目标点（标注点列表点击联动）：仅在 centerOn 变化时居中一次。
+        /// 经纬度与上次相同则跳过；缩放至少 15（不低于当前），保证目标点足够清晰。
         func updateCenter(on map: MLNMapView) {
             guard let c = parent.centerOn else { return }
             if let l = lastCenter, l.latitude == c.latitude, l.longitude == c.longitude { return }
@@ -527,6 +541,7 @@ final class HeadingUserLocationView: MLNUserLocationAnnotationView {
 
     private static let blue = UIColor(red: 0.12, green: 0.49, blue: 1.0, alpha: 1)
 
+    /// MapLibre 定位/朝向刷新时回调：首帧先确定尺寸，之后懒构建图层，再按真北朝向旋转箭头。
     override func update() {
         if frame.isNull {                 // 首次：给定尺寸后等下一帧布局
             frame = CGRect(x: 0, y: 0, width: 64, height: 64)
@@ -539,6 +554,7 @@ final class HeadingUserLocationView: MLNUserLocationAnnotationView {
         }
     }
 
+    /// 懒构建箭头与中心圆点图层（仅一次）：箭头锚点居中以便绕中心旋转，圆点叠于其上。
     private func build() {
         let c = CGPoint(x: bounds.midX, y: bounds.midY)
 

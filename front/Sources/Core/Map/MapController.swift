@@ -15,6 +15,7 @@ final class MapController: ObservableObject {
     enum LocateState { case off, centered, following }
     @Published var locateState: LocateState = .off
 
+    // 缩放滑块两端对应的 zoom 级别（setZoom 的 0…1 映射区间）
     var minZoom: Double = 1
     var maxZoom: Double = 18
 

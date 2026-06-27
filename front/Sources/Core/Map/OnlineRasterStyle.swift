@@ -12,6 +12,7 @@ enum OnlineRasterStyle {
         let style: [String: Any] = [
             "version": 8,
             "name": "esri-imagery",
+            // maxzoom 19：ESRI World Imagery 提供的最高瓦片级别
             "sources": ["esri": ["type": "raster", "tiles": [esriImageryTemplate],
                                   "tileSize": 256, "minzoom": 0, "maxzoom": 19]],
             "layers": [["id": "esri", "type": "raster", "source": "esri"]]

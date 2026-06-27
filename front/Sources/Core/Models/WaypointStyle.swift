@@ -41,8 +41,9 @@ extension WaypointKind {
         }
     }
 
-    var color: Color { Color(hex: hex) }
+    var color: Color { Color(hex: hex) }  // SwiftUI 用
 
+    /// UIKit 用（MapKit 标注等）：从 0xRRGGBB 按位取出三通道并归一化到 0~1。
     var uiColor: UIColor {
         UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255,
                 green: CGFloat((hex >> 8) & 0xFF) / 255,

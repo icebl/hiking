@@ -5,11 +5,11 @@ import MapLibre
 /// 离线地图管理（任务 2.7 / A 段）：导入 / 列表 / 删除 本地矢量离线包(.pmtiles)。
 /// 离线包由电脑侧 planetiler 生成（见 tools/ 文档），导入后在地图页「图层」切到离线矢量底图。
 struct OfflineMapsView: View {
-    @State private var packs: [URL] = []
+    @State private var packs: [URL] = []                // 本地已导入的离线包文件（矢量/影像/等高线）
     @State private var regions: [MLNOfflinePack] = []   // 已缓存的离线影像区域
-    @State private var showImporter = false
-    @State private var shareURL: URL?
-    @State private var importing = false
+    @State private var showImporter = false             // 是否弹出系统文件选择器
+    @State private var shareURL: URL?                   // 待分享/导出的离线包；非 nil 时弹分享面板
+    @State private var importing = false                // 导入进行中（遮罩 loading）
 
     var body: some View {
         List {
@@ -35,6 +35,7 @@ struct OfflineMapsView: View {
                             Text(String(format: "影像缓存 · %.1f MB", regionMB(pack)))
                                 .font(.caption).foregroundColor(AppColor.ink2)
                         }
+                        // 左滑删除：移除该缓存区域，回调里刷新列表
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 MLNOfflineStorage.shared.removePack(pack) { _ in reloadRegions() }
@@ -81,6 +82,7 @@ struct OfflineMapsView: View {
             reload()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { reloadRegions() }  // packs 异步加载兜底
         }
+        // 选到文件后在后台线程导入；为避免遮罩一闪而过，导入太快时补足到至少 2 秒
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.data]) { result in
             guard case .success(let url) = result else { return }
             importing = true
@@ -89,7 +91,7 @@ struct OfflineMapsView: View {
                 try? OfflineMaps.importPack(from: url)
                 let elapsed = Date().timeIntervalSince(start)
                 if elapsed < 2 { try? await Task.sleep(nanoseconds: UInt64((2 - elapsed) * 1_000_000_000)) }
-                await MainActor.run { importing = false; reload() }
+                await MainActor.run { importing = false; reload() }   // 回主线程收起遮罩并刷新
             }
         }
         .overlay {
@@ -109,18 +111,23 @@ struct OfflineMapsView: View {
         }
     }
 
+    /// 按文件类型给出中文标签（栅格影像/等高线/矢量底图），用于列表副标题。
     private func typeLabel(_ url: URL) -> String {
         if OfflineMaps.isRaster(url) { return "影像（栅格）" }
         if OfflineMaps.isContour(url) { return "等高线" }
         return "矢量底图"
     }
+    /// 从缓存包的 context（下载时写入的名称）解码区域名，缺省回退「影像区域」。
     private func regionName(_ pack: MLNOfflinePack) -> String {
         String(data: pack.context, encoding: .utf8) ?? "影像区域"
     }
+    /// 已下载字节换算为 MB，供列表展示。
     private func regionMB(_ pack: MLNOfflinePack) -> Double {
         Double(pack.progress.countOfTileBytesCompleted) / 1024 / 1024
     }
+    /// 刷新已缓存影像区域列表（来自 MapLibre 离线存储）。
     private func reloadRegions() { regions = MLNOfflineStorage.shared.packs ?? [] }
+    /// 整体刷新：重读本地离线包文件 + 缓存区域。
     private func reload() {
         packs = OfflineMaps.list()
         reloadRegions()

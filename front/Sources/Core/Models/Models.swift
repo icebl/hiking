@@ -77,35 +77,37 @@ struct Folder: Codable, Identifiable, Syncable, FetchableRecord, MutablePersista
 
 // MARK: - TrackPoint（轨迹点）
 struct TrackPoint: Codable, Identifiable, FetchableRecord, MutablePersistableRecord {
-    var id: Int64?              // 自增
-    var trackId: UUID
-    var segment: Int           // 分段号（断段用）
-    var seq: Int               // 序号
-    var lat: Double
-    var lon: Double
-    var elevation: Double?     // 海拔（气压计/GPS/DEM）
-    var timestamp: Date?
-    var speed: Double?         // m/s
-    var horizontalAccuracy: Double?
+    var id: Int64?              // 自增主键；插入前为 nil，didInsert 回填
+    var trackId: UUID          // 所属轨迹（外键，删轨迹级联删点）
+    var segment: Int           // 分段号（断段用：暂停/丢信号后 +1，段间不连线）
+    var seq: Int               // 段内序号，决定同段内的连线顺序
+    var lat: Double            // 纬度（度，WGS84）
+    var lon: Double            // 经度（度，WGS84）
+    var elevation: Double?     // 海拔（米，来源：气压计/GPS/DEM）
+    var timestamp: Date?       // 采集时刻；用于算速度/用时
+    var speed: Double?         // 瞬时速度（m/s）
+    var horizontalAccuracy: Double?  // 水平精度（米），越小越准，可用于过滤漂移点
 
     static let databaseTableName = "trackPoint"
+    // 插入成功后把数据库生成的自增 rowID 回填到 id。
     mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 
 // MARK: - Waypoint（航点/标注点）
+/// 航点类型；展示样式（中文名/图标/颜色）见 WaypointStyle.swift 扩展。
 enum WaypointKind: String, Codable {
     case camp, water, junction, danger, photo, other
 }
 
 struct Waypoint: Codable, Identifiable, Syncable, FetchableRecord, MutablePersistableRecord {
     var id: UUID
-    var trackId: UUID?
+    var trackId: UUID?          // 所属轨迹；nil = 独立航点（不挂任何轨迹）
     var name: String
     var kind: WaypointKind
-    var lat: Double
-    var lon: Double
-    var elevation: Double?
-    var note: String?
+    var lat: Double             // 纬度（度，WGS84）
+    var lon: Double             // 经度（度，WGS84）
+    var elevation: Double?      // 海拔（米）
+    var note: String?           // 备注
     var createdAt: Date
     var updatedAt: Date
     var isDeleted: Bool
@@ -115,10 +117,13 @@ struct Waypoint: Codable, Identifiable, Syncable, FetchableRecord, MutablePersis
 }
 
 // MARK: - RecordingSession（进行中会话，用于崩溃恢复，对应任务 3.8）
+/// 记录状态：进行中 / 已暂停。
 enum RecordingState: String, Codable { case recording, paused }
 
+/// 记录会话：每次开始记录写一条，结束/丢弃时删除。
+/// 启动时若仍存在（见 activeSessions），说明上次异常退出，可据 id 续接对应轨迹恢复记录。
 struct RecordingSession: Codable, Identifiable, FetchableRecord, MutablePersistableRecord {
-    var id: UUID
+    var id: UUID               // 与对应轨迹共用同一 UUID，便于恢复时定位轨迹
     var state: RecordingState
     var startedAt: Date
     var updatedAt: Date

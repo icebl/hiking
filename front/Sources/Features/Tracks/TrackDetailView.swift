@@ -3,38 +3,38 @@ import CoreLocation
 
 /// 轨迹详情（任务 6.2 / 5.6）：地图 / 详情 页签 + 操作（导出/导航）。
 struct TrackDetailView: View {
-    let trackId: UUID
+    let trackId: UUID                                // 入参：要展示的轨迹 ID（其余数据 .task 时从仓库按需加载）
     @Environment(\.dismiss) private var dismiss
-    @State private var tab = 0       // 0 地图 / 1 详情
-    @State private var track: Track?
-    @State private var points: [TrackPoint] = []
-    @State private var waypoints: [Waypoint] = []
-    @State private var coords: [CLLocationCoordinate2D] = []
-    @State private var exportURL: URL?
-    @State private var showShare = false
-    @State private var exportError: String?
-    @StateObject private var mapCtrl = MapController()
-    @State private var showKm = false
-    @State private var showContours = false
-    @State private var showRoadNetwork = false
-    @State private var toast: String?
-    @State private var baseMode: MapBaseMode = .onlineRaster
-    @State private var showLayerSheet = false
-    @State private var profile: [ElevSample] = []
-    @State private var selectedProfileIndex: Int?
+    @State private var tab = 0       // 顶部分段页签：0 地图 / 1 详情 / 2 标注点
+    @State private var track: Track?                 // 轨迹元数据（名称、距离、爬升等），加载前为 nil
+    @State private var points: [TrackPoint] = []     // 轨迹原始点序列（经纬度+海拔），用于建剖面/导出
+    @State private var waypoints: [Waypoint] = []    // 航点（标注点）列表
+    @State private var coords: [CLLocationCoordinate2D] = []  // points 投影出的坐标，供地图画线
+    @State private var exportURL: URL?               // 导出生成的 GPX 临时文件地址
+    @State private var showShare = false             // 是否弹出系统分享面板
+    @State private var exportError: String?          // 导出失败的错误文案，非 nil 即弹错误 alert
+    @StateObject private var mapCtrl = MapController()  // 地图控制器：缩放/定位等命令出口
+    @State private var showKm = false                // 是否显示每公里里程标
+    @State private var showContours = false          // 是否叠加等高线图层
+    @State private var showRoadNetwork = false       // 是否高亮路网图层（仅离线矢量底图可用）
+    @State private var toast: String?                // 轻提示文案，非 nil 时浮层显示，1.5s 后自动清空
+    @State private var baseMode: MapBaseMode = .onlineRaster  // 当前底图：在线影像 / 离线矢量
+    @State private var showLayerSheet = false        // 是否弹出底图选择面板
+    @State private var profile: [ElevSample] = []    // 海拔剖面采样（.task 中 buildProfile 生成）
+    @State private var selectedProfileIndex: Int?    // 剖面被拖选的采样下标 → 地图高亮该点；nil 为未选
     @State private var showProfile = false           // 默认不展开海拔剖面
     @State private var showWaypoints = true          // 轨迹上标记点显隐
-    @State private var showRename = false
-    @State private var renameText = ""
-    @State private var showDeleteConfirm = false
+    @State private var showRename = false            // 是否弹出重命名 alert
+    @State private var renameText = ""               // 重命名输入框绑定值
+    @State private var showDeleteConfirm = false     // 是否弹出删除确认
     // 标注点（航点）管理
     @State private var focusWaypoint: Waypoint?         // 列表点击 → 地图居中目标
-    @State private var editingWaypoint: Waypoint?
-    @State private var editWpName = ""
-    @State private var editWpNote = ""
-    @State private var showEditWaypoint = false
-    @State private var kindPickWaypoint: Waypoint?
-    @State private var showKindDialog = false
+    @State private var editingWaypoint: Waypoint?       // 正在编辑名称/备注的航点
+    @State private var editWpName = ""                  // 编辑航点名称输入框
+    @State private var editWpNote = ""                  // 编辑航点备注输入框
+    @State private var showEditWaypoint = false         // 是否弹出编辑航点 alert
+    @State private var kindPickWaypoint: Waypoint?      // 正在更改类型的航点
+    @State private var showKindDialog = false           // 是否弹出类型选择面板
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,6 +47,7 @@ struct TrackDetailView: View {
                         MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
                                      showsUserLocation: true, fitToTrack: true, showKmMarkers: showKm,
                                      showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
+                                     // 剖面选中点 → 地图高亮坐标（下标越界则不高亮）
                                      highlightCoordinate: selectedProfileIndex.flatMap {
                                          profile.indices.contains($0) ? profile[$0].coord : nil },
                                      showRoadNetwork: showRoadNetwork,
@@ -59,6 +60,7 @@ struct TrackDetailView: View {
                                            onPlaceholder: showToast, onLayers: { showLayerSheet = true },
                                            onContours: { toggleContours() },
                                            onProfile: {
+                                               // 切换剖面显隐；收起时清除选中点，避免地图残留高亮
                                                withAnimation { showProfile.toggle() }
                                                if !showProfile { selectedProfileIndex = nil }
                                            })
@@ -73,6 +75,7 @@ struct TrackDetailView: View {
                         }
                     }
                     .frame(maxHeight: .infinity)
+                    // 仅有剖面数据且开关打开时，在地图下方拉出剖面（与底部按钮互斥，见下方 if）
                     if !profile.isEmpty && showProfile {
                         ElevationProfileView(samples: profile, selected: $selectedProfileIndex)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -123,6 +126,7 @@ struct TrackDetailView: View {
             Button("取消", role: .cancel) {}
         } message: { Text("删除后可在云端同步前恢复（三期）；本机列表将移除。") }
         .task {
+            // 进入页面时一次性从仓库加载轨迹/点/航点，并派生出绘线坐标与海拔剖面
             track = try? TrackRepository().track(id: trackId)
             points = (try? TrackRepository().points(trackId: trackId)) ?? []
             waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
@@ -169,6 +173,7 @@ struct TrackDetailView: View {
                     .padding(.vertical, 8)
             } else {
                 ForEach(waypoints) { w in
+                    // 点击航点：设为居中目标并切回地图页，让地图把该点移到中心
                     Button { focusWaypoint = w; tab = 0 } label: {
                         HStack(spacing: 12) {
                             Image(systemName: w.kind.icon)
@@ -203,16 +208,20 @@ struct TrackDetailView: View {
         }
     }
 
+    /// 从仓库重新拉取航点列表（增删改后刷新 UI）。
     private func reloadWaypoints() {
         waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
     }
+    /// 删除航点并刷新列表。
     private func deleteWaypoint(_ w: Waypoint) {
         try? TrackRepository().deleteWaypoint(id: w.id)
         reloadWaypoints()
     }
+    /// 进入航点编辑：预填名称/备注并弹出编辑 alert。
     private func startWaypointEdit(_ w: Waypoint) {
         editingWaypoint = w; editWpName = w.name; editWpNote = w.note ?? ""; showEditWaypoint = true
     }
+    /// 保存航点编辑（名称留空则保留原名，备注留空存 nil），刷新列表。
     private func saveWaypointEdit() {
         guard let w = editingWaypoint else { return }
         let n = editWpName.trimmingCharacters(in: .whitespaces)
@@ -220,6 +229,7 @@ struct TrackDetailView: View {
                                               note: editWpNote.isEmpty ? nil : editWpNote, kind: w.kind)
         editingWaypoint = nil; reloadWaypoints()
     }
+    /// 仅更改航点类型（名称/备注不变），刷新列表。
     private func changeWaypointKind(to kind: WaypointKind) {
         guard let w = kindPickWaypoint else { return }
         try? TrackRepository().updateWaypoint(id: w.id, name: w.name, note: w.note, kind: kind)
@@ -279,20 +289,24 @@ struct TrackDetailView: View {
         return out
     }
 
+    /// 重命名轨迹：写库成功后同步更新内存中的 track，使标题立即刷新（空名忽略）。
     private func renameTrack() {
         let n = renameText.trimmingCharacters(in: .whitespaces)
         guard !n.isEmpty else { return }
         try? TrackRepository().rename(id: trackId, name: n)
         track?.name = n
     }
+    /// 软删除轨迹并关闭详情页（数据可在云端同步前恢复）。
     private func deleteTrack() {
         try? TrackRepository().softDelete(id: trackId)
         dismiss()
     }
+    /// 切换等高线：未导入等高线包时给出提示而非切换，避免开了开关却看不到东西。
     private func toggleContours() {
         if OfflineMaps.contourPack() == nil { showToast("未导入等高线包（我的 → 离线地图 导入 *contour*.pmtiles）") }
         else { showContours.toggle() }
     }
+    /// 显示一条 1.5s 自动消失的轻提示；用闭包内比对防止后续提示被旧的清空覆盖。
     private func showToast(_ msg: String) {
         toast = msg
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { if toast == msg { toast = nil } }

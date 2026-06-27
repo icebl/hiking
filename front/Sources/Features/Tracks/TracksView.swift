@@ -11,17 +11,17 @@ final class ImportCoordinator: ObservableObject {
 /// 外层 NavigationStack 由 RootTabView 提供（此处不再嵌套）。
 struct TracksView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var segment = 0           // 0 本地 / 1 云端
-    @State private var search = ""
-    @State private var tracks: [Track] = []
-    @State private var folders: [Folder] = []
-    @State private var expanded: Set<String> = ["ungrouped"]
-    @State private var showImport = false
-    @State private var showCreateFolder = false
-    @State private var newFolderName = ""
-    @State private var moveTarget: Track?
+    @State private var segment = 0           // 顶部分段：0 本地 / 1 云端
+    @State private var search = ""           // 搜索关键词，按名称大小写不敏感过滤
+    @State private var tracks: [Track] = []   // 全部本地轨迹（含分组与未分组）
+    @State private var folders: [Folder] = [] // 文件夹列表，每个对应一个可折叠分组
+    @State private var expanded: Set<String> = ["ungrouped"]  // 展开的分组键集合；默认展开「未分组」
+    @State private var showImport = false     // 是否弹出导入预览 sheet
+    @State private var showCreateFolder = false  // 是否弹出新建文件夹 alert
+    @State private var newFolderName = ""     // 新建文件夹名称输入框
+    @State private var moveTarget: Track?     // 正在移动到文件夹的轨迹，非 nil 即弹选择面板
 
-    private let repo = TrackRepository()
+    private let repo = TrackRepository()      // 数据访问层：轨迹/文件夹的增删改查
 
     var body: some View {
         VStack(spacing: 0) {
@@ -113,6 +113,8 @@ struct TracksView: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity).padding()
     }
 
+    /// 一个可折叠分组：标题栏点击切换展开/收起；展开时列出轨迹，空分组显示「（空）」。
+    /// - key: 分组唯一键（文件夹用 UUID 字符串，未分组用 "ungrouped"），用于记录展开状态。
     private func groupSection(title: String, key: String, items: [Track]) -> some View {
         Section {
             if expanded.contains(key) {
@@ -178,26 +180,34 @@ struct TracksView: View {
     }
 
     // MARK: - 数据/动作
+    /// 经搜索过滤后的轨迹集合（关键词为空则返回全部）；下面分组都基于它再切分。
     private var shown: [Track] {
         let q = search.trimmingCharacters(in: .whitespaces)
         return q.isEmpty ? tracks : tracks.filter { $0.name.localizedCaseInsensitiveContains(q) }
     }
+    /// 未归入任何文件夹的轨迹。
     private var ungrouped: [Track] { shown.filter { $0.folderId == nil } }
+    /// 指定文件夹下的轨迹。
     private func tracksIn(_ id: UUID) -> [Track] { shown.filter { $0.folderId == id } }
 
+    /// 切换某分组的展开/收起状态。
     private func toggle(_ key: String) {
         if expanded.contains(key) { expanded.remove(key) } else { expanded.insert(key) }
     }
+    /// 重新从仓库加载轨迹与文件夹（出现/导入/增删后刷新）。
     private func reload() {
         tracks = (try? repo.listTracks()) ?? []
         folders = (try? repo.listFolders()) ?? []
     }
+    /// 软删除轨迹并刷新。
     private func delete(_ t: Track) { try? repo.softDelete(id: t.id); reload() }
+    /// 把轨迹移动到目标文件夹（nil 表示移出到未分组）。
     private func move(_ t: Track, to folderId: UUID?) {
         try? repo.moveTrack(id: t.id, to: folderId)
         if let fid = folderId { expanded.insert(fid.uuidString) }   // 展开目标文件夹，立刻可见
         reload()
     }
+    /// 创建文件夹（名称去空白后为空则忽略），刷新列表。
     private func createFolder() {
         let name = newFolderName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
@@ -214,13 +224,14 @@ struct ImportPreviewView: View {
     let fileURL: URL?
     @Environment(\.dismiss) private var dismiss
 
-    @State private var parsed: [GPXService.ParsedTrack] = []
-    @State private var errorMsg: String?
-    @State private var showPicker = false
-    @State private var imported = false
+    @State private var parsed: [GPXService.ParsedTrack] = []  // 解析出的待导入轨迹（可能多条）
+    @State private var errorMsg: String?       // 解析/入库错误文案，非 nil 时显示错误态
+    @State private var showPicker = false      // 是否弹出系统文件选择器
+    @State private var imported = false        // 是否已成功入库，切到成功态
 
     init(fileURL: URL? = nil) { self.fileURL = fileURL }
 
+    // 允许导入的文件类型：GPX / KML
     private static let importTypes: [UTType] =
         ["gpx", "kml"].compactMap { UTType(filenameExtension: $0) }
 
@@ -289,6 +300,7 @@ struct ImportPreviewView: View {
     }
 
     // MARK: - 逻辑
+    /// 解析所选文件为预览轨迹。外部 URL 需先取得安全作用域访问权限，结束后释放（defer）。
     private func load(_ url: URL) {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -300,6 +312,7 @@ struct ImportPreviewView: View {
         }
     }
 
+    /// 确认导入：逐条入库，全部成功切到成功态，任一失败显示错误。
     private func confirmImport() {
         do {
             for t in parsed { try ImportService.save(t) }

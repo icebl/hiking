@@ -15,18 +15,18 @@ struct SettingsView: View {
     @AppStorage("recordWhileNav") private var recordWhileNav = true
     @AppStorage("coordFormat") private var coordFormat = "度 dd.ddddd°"
 
-    // 草稿（仅「确认」后写回上面）
-    @State private var dSample = 5
-    @State private var dMinMove = 5
-    @State private var dAutoPause = true
-    @State private var dBaro = true
-    @State private var dOffRoute = 25
-    @State private var dWpApproach = 80
-    @State private var dVoice = false
-    @State private var dVoiceInt = 5
-    @State private var dRecNav = true
-    @State private var dCoord = "度 dd.ddddd°"
-    @State private var justSaved = false
+    // 草稿（界面只改这些，仅「确认」后写回上面持久化项）；初值会在 onAppear 由 loadDraft 覆盖
+    @State private var dSample = 5         // 采样间隔(秒) 1…30
+    @State private var dMinMove = 5        // 最小位移(米) 1…50
+    @State private var dAutoPause = true   // 静止自动暂停
+    @State private var dBaro = true        // 气压计辅助海拔
+    @State private var dOffRoute = 25      // 偏航阈值(米) 10…100
+    @State private var dWpApproach = 80    // 航点接近提醒(米) 30…300
+    @State private var dVoice = false      // 语音播报开关
+    @State private var dVoiceInt = 5       // 语音播报间隔(分) 5/10
+    @State private var dRecNav = true      // 导航时同时记录
+    @State private var dCoord = "度 dd.ddddd°"   // 坐标格式
+    @State private var justSaved = false   // 刚点过确认（用于按钮显示「已保存 ✓」）
 
     var body: some View {
         Form {
@@ -67,6 +67,7 @@ struct SettingsView: View {
         .onAppear(perform: loadDraft)
     }
 
+    /// 草稿与持久化值是否有差异：决定「确认修改」按钮可用与高亮，任一项不同即为脏。
     private var dirty: Bool {
         dSample != sampleInterval || dMinMove != minMove || dAutoPause != autoPause
         || dBaro != useBarometer || dOffRoute != offRouteThreshold || dWpApproach != waypointApproach
@@ -74,6 +75,7 @@ struct SettingsView: View {
         || dVoiceInt != voiceInterval || dRecNav != recordWhileNav || dCoord != coordFormat
     }
 
+    /// 进入页面时把持久化值灌入草稿，保证界面初始展示与已保存设置一致。
     private func loadDraft() {
         dSample = sampleInterval; dMinMove = minMove; dAutoPause = autoPause; dBaro = useBarometer
         dOffRoute = offRouteThreshold; dWpApproach = waypointApproach
@@ -81,6 +83,7 @@ struct SettingsView: View {
         dRecNav = recordWhileNav; dCoord = coordFormat
     }
 
+    /// 点「确认修改」时把草稿写回 @AppStorage 真正生效，并标记 justSaved 用于按钮反馈。
     private func apply() {
         sampleInterval = dSample; minMove = dMinMove; autoPause = dAutoPause; useBarometer = dBaro
         offRouteThreshold = dOffRoute; waypointApproach = dWpApproach

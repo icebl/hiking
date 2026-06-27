@@ -6,8 +6,10 @@ import CoreLocation
 /// 以及独立 `<Point>` 作为航点。多 Placemark 全部导入。KMZ（压缩）暂不支持。
 final class KMLService: NSObject, XMLParserDelegate {
 
+    // parseFailed：XML 无法读取/解析；empty：无任何线轨迹也无航点
     enum KMLError: Error { case parseFailed, empty }
 
+    /// 解析 KML 文件 → ParsedTrack 列表。基于 SAX 流式回调（见下方 XMLParserDelegate）。
     func parse(url: URL) throws -> [GPXService.ParsedTrack] {
         guard let parser = XMLParser(contentsOf: url) else { throw KMLError.parseFailed }
         parser.shouldProcessNamespaces = false   // 保留 gx: 前缀，按原始 elementName 匹配
@@ -33,31 +35,35 @@ final class KMLService: NSObject, XMLParserDelegate {
     }
 
     // MARK: - 解析状态
+    // SAX 解析是有状态的：下列字段在回调间累积，每个 Placemark 结束时结算一次。
     private var tracks: [(name: String, points: [TrackPoint], hasTime: Bool, hasElevation: Bool)] = []
     private var waypoints: [Waypoint] = []
 
-    private var buffer = ""
+    private var buffer = ""                     // 当前元素的字符内容累积（含 CDATA）
     private var folderName: String?            // 文件夹名（作轨迹名兜底，如“赤峰市 徒步”）
-    private var inPlacemark = false
+    private var inPlacemark = false            // 以下 in* 为当前所处元素的开关标记
     private var placemarkName: String?
     private var inLineString = false
     private var inGxTrack = false
     private var inPoint = false
     private var lineStringCoords = ""               // LineString/Point 的 coordinates 文本
-    private var gxCoords: [(lat: Double, lon: Double, ele: Double?)] = []
-    private var gxWhens: [Date?] = []
+    private var gxCoords: [(lat: Double, lon: Double, ele: Double?)] = []   // gx:Track 的坐标序列
+    private var gxWhens: [Date?] = []                                        // gx:Track 的时间序列（与 gxCoords 按下标对齐）
     private var pointCoords = ""
 
+    // gx:Track 的 <when> 时间为 ISO8601，复用同一格式器避免重复创建
     private static let isoFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]; return f
     }()
 
     // MARK: - XMLParserDelegate
+    // 元素开始：重置字符缓冲，并按标签置位对应状态开关
     func parser(_ parser: XMLParser, didStartElement el: String, namespaceURI: String?,
                 qualifiedName qName: String?, attributes: [String: String]) {
         buffer = ""
         switch el {
         case "Placemark":
+            // 进入新 Placemark：清空上一个的残留状态，避免串数据
             inPlacemark = true; placemarkName = nil
             inLineString = false; inGxTrack = false; inPoint = false
             lineStringCoords = ""; pointCoords = ""
@@ -79,24 +85,27 @@ final class KMLService: NSObject, XMLParserDelegate {
         if let s = String(data: CDATABlock, encoding: .utf8) { buffer += s }
     }
 
+    // 元素结束：buffer 此时已含完整文本，按标签归档到对应字段
     func parser(_ parser: XMLParser, didEndElement el: String, namespaceURI: String?,
                 qualifiedName qName: String?) {
         let text = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
         switch el {
         case "name":
+            // Placemark 内的 name 作轨迹/航点名；外层 name 作文件夹兜底名
             if inPlacemark { if placemarkName == nil { placemarkName = text } }
             else if folderName == nil { folderName = text }
         case "coordinates":
+            // KML 坐标顺序为 lon,lat,alt，与常见 lat,lon 相反
             if inPoint { pointCoords = text } else if inLineString { lineStringCoords = text }
         case "when":
-            if inGxTrack { gxWhens.append(Self.isoFormatter.date(from: text)) }
+            if inGxTrack { gxWhens.append(Self.isoFormatter.date(from: text)) }   // 解析失败存 nil，保持与 coord 下标对齐
         case "gx:coord", "coord":
             if inGxTrack {
                 let p = text.split(separator: " ").compactMap { Double($0) }
-                if p.count >= 2 { gxCoords.append((lat: p[1], lon: p[0], ele: p.count >= 3 ? p[2] : nil)) }
+                if p.count >= 2 { gxCoords.append((lat: p[1], lon: p[0], ele: p.count >= 3 ? p[2] : nil)) }   // 注意 p[1]=lat、p[0]=lon
             }
         case "Placemark":
-            finalizeCurrentPlacemark()
+            finalizeCurrentPlacemark()   // 收尾本 Placemark
             inPlacemark = false
         default: break
         }
@@ -110,10 +119,12 @@ final class KMLService: NSObject, XMLParserDelegate {
         var hasTime = false, hasEle = false
         var seq = 0
 
+        // 三选一优先级：LineString（普通路线） > gx:Track（含时间轨迹） > Point（单点航点）
         if !lineStringCoords.isEmpty {
+            // 坐标组以空白分隔，组内 lon,lat[,alt] 以逗号分隔
             for tuple in lineStringCoords.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" }) {
                 let c = tuple.split(separator: ",").compactMap { Double($0) }
-                guard c.count >= 2 else { continue }
+                guard c.count >= 2 else { continue }   // 不足经纬度则跳过
                 let ele: Double? = c.count >= 3 ? c[2] : nil
                 if ele != nil { hasEle = true }
                 pts.append(TrackPoint(id: nil, trackId: UUID(), segment: 0, seq: seq,
@@ -124,7 +135,7 @@ final class KMLService: NSObject, XMLParserDelegate {
         } else if !gxCoords.isEmpty {
             for (i, c) in gxCoords.enumerated() {
                 if c.ele != nil { hasEle = true }
-                let t = i < gxWhens.count ? gxWhens[i] : nil
+                let t = i < gxWhens.count ? gxWhens[i] : nil   // 时间按下标与坐标对齐，缺失则无时间
                 if t != nil { hasTime = true }
                 pts.append(TrackPoint(id: nil, trackId: UUID(), segment: 0, seq: seq,
                                       lat: c.lat, lon: c.lon, elevation: c.ele, timestamp: t,
@@ -145,7 +156,7 @@ final class KMLService: NSObject, XMLParserDelegate {
             }
         }
 
-        if !pts.isEmpty {
+        if !pts.isEmpty {   // 有线轨迹点才记为一条轨迹；纯航点不进 tracks
             // 轨迹名：Placemark 名缺失或泛化("Track")时回退用文件夹名
             let generic = placemarkName == nil || placemarkName!.isEmpty || placemarkName!.caseInsensitiveCompare("Track") == .orderedSame
             let name = generic ? (folderName ?? "导入轨迹") : placemarkName!

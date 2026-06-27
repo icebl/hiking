@@ -21,6 +21,7 @@ struct MeView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                // 功能入口：离线地图 / 导入轨迹 / 设置 / 关于
                 Section("入口") {
                     NavigationLink { OfflineMapsView() } label: { Label("离线地图", systemImage: "square.3.stack.3d") }
                     NavigationLink { ImportPreviewView() } label: { Label("导入轨迹", systemImage: "square.and.arrow.down") }

@@ -7,31 +7,33 @@ import UserNotifications
 /// 沿轨迹导航控制器（任务 4.x）：实时定位驱动 NavigationEngine，发布剩余/偏航/到达，触发震动+本地通知。
 /// 本轮不做同时记录与语音播报。
 final class NavigationController: ObservableObject {
-    @Published var planCoordinates: [CLLocationCoordinate2D] = []
-    @Published var remainingDistance: Double = 0    // m
-    @Published var remainingAscent: Double = 0      // m
-    @Published var distanceToLine: Double = 0       // 距计划线（m）
-    @Published var isOffRoute = false
-    @Published var arrived = false
-    @Published var reverse = false
+    @Published var planCoordinates: [CLLocationCoordinate2D] = []  // 计划线坐标（按方向构建后供地图绘制）
+    @Published var remainingDistance: Double = 0    // 到终点剩余距离，单位 m
+    @Published var remainingAscent: Double = 0      // 剩余累计爬升，单位 m
+    @Published var distanceToLine: Double = 0       // 当前位置到计划线的垂距，单位 m（偏航判据）
+    @Published var isOffRoute = false               // 是否处于偏航状态（带滞回）
+    @Published var arrived = false                  // 是否已到终点附近（仅提示，不自动结束）
+    @Published var reverse = false                  // 导航方向：false 正向 / true 反向
     @Published var isRecording = false              // 是否同时记录实走
     @Published var waypoints: [Waypoint] = []       // 沿线航点（地图显示）
     @Published var nearbyWaypoint: Waypoint?        // 当前最近的接近中航点（驱动横幅）
     @Published var nearbyWaypointDistance: Double = 0
 
-    private let engine = NavigationEngine()
+    private let engine = NavigationEngine()          // 投影匹配/偏航/剩余计算引擎
     private let location = LocationManager.shared
     private let recorder = RecordingController()     // 同时记录实走轨迹（任务 4.5）
-    private var line: NavigationEngine.PlannedLine?
+    private var line: NavigationEngine.PlannedLine?  // 预处理后的计划线（含累计爬升表）
     private var cancellables = Set<AnyCancellable>()
-    private var lastOffRoute = false
-    private var running = false
+    private var lastOffRoute = false                 // 上一帧偏航态，用于检测跳变只触发一次提醒
+    private var running = false                       // 防重复 start 的运行标志
 
     private let arriveThreshold: Double = 30        // 接近终点（m）
     private var nearbyIds: Set<UUID> = []           // 已提醒过的接近航点（滞回防重复）
     private var approachThreshold: Double = 80      // 进入此半径 → 接近提醒（m，读设置）
     private var clearThreshold: Double = 130        // 离开此半径 → 解除，可再次提醒（m，= 接近 + 50 滞回）
 
+    /// 启动导航：构建计划线、读阈值设置、订阅定位流。
+    /// 参数 trackId 计划轨迹；reverse 是否反向；alsoRecord 是否同时记录实走。前置 !running，防重入。
     func start(trackId: UUID, reverse: Bool, alsoRecord: Bool) {
         guard !running else { return }
         running = true
@@ -58,6 +60,7 @@ final class NavigationController: ObservableObject {
         location.$location.compactMap { $0 }.sink { [weak self] in self?.onLocation($0) }.store(in: &cancellables)
     }
 
+    /// 停止导航：退订定位。仅在未同时记录时直接停定位，否则交由 recorder 收尾以免提前断流。
     func stop() {
         running = false
         cancellables.removeAll()
@@ -70,13 +73,15 @@ final class NavigationController: ObservableObject {
     func finishDiscarding() { recorder.cancel(); isRecording = false; location.stop() }
 
     // MARK: - 定位驱动
+    /// 每帧定位回调：更新剩余距离/爬升、偏航跳变提醒、航点接近检测。导航主流程。
     private func onLocation(_ loc: CLLocation) {
         guard let line else { return }
-        let good = loc.horizontalAccuracy >= 0 && loc.horizontalAccuracy <= 30
+        let good = loc.horizontalAccuracy >= 0 && loc.horizontalAccuracy <= 30  // 精度门限：差精度不参与偏航判定
         let (dist, progress) = engine.update(current: loc, line: line, accuracyGood: good)
         distanceToLine = dist
         remainingDistance = engine.remaining(line: line, progress: progress)
 
+        // 用已匹配到的线上索引查累计爬升表，得已走爬升，反推剩余（clamp ≥0 防抖动负值）
         let idx = engine.lastMatchedIndex
         let passed = line.cumulativeAscent.indices.contains(idx) ? line.cumulativeAscent[idx] : 0
         remainingAscent = max(0, line.totalAscent - passed)
@@ -84,7 +89,7 @@ final class NavigationController: ObservableObject {
         // 到达终点仅提示（不自动结束，符合决策）
         if remainingDistance < arriveThreshold && !arrived { arrived = true }
 
-        // 偏航跳变：震动 + 本地通知
+        // 偏航跳变：仅在 在线→偏航 的状态翻转瞬间提醒一次，避免持续偏航时反复震动/推送
         if engine.isOffRoute != lastOffRoute {
             lastOffRoute = engine.isOffRoute
             if engine.isOffRoute { fireOffRouteAlert(distance: dist) }
@@ -97,18 +102,19 @@ final class NavigationController: ObservableObject {
     /// 沿线航点接近检测：进入 approachThreshold 触发一次提醒，离开 clearThreshold 后可再次提醒（滞回）。
     private func updateWaypointProximity(_ loc: CLLocation) {
         guard !waypoints.isEmpty else { return }
-        var closest: (w: Waypoint, d: Double)?
+        var closest: (w: Waypoint, d: Double)?   // 进入半径内最近的航点，用于驱动横幅
         for w in waypoints {
             let d = loc.distance(from: CLLocation(latitude: w.lat, longitude: w.lon))
             if d <= approachThreshold {
                 if closest == nil || d < closest!.d { closest = (w, d) }
-                if !nearbyIds.contains(w.id) {
+                if !nearbyIds.contains(w.id) {       // 滞回上半：首次进入才提醒，记入已提醒集合
                     nearbyIds.insert(w.id)
                     fireWaypointAlert(w, distance: d)
                 }
-            } else if d > clearThreshold {
+            } else if d > clearThreshold {           // 滞回下半：远到清除阈值外才复位，下次靠近可再提醒
                 nearbyIds.remove(w.id)
             }
+            // 介于 approach 与 clear 之间：保持原状态，避免边界来回抖动重复提醒
         }
         nearbyWaypoint = closest?.w
         nearbyWaypointDistance = closest?.d ?? 0

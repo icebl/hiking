@@ -75,6 +75,7 @@ enum OfflineVectorStyle {
         ]
 
         // ===== 文字标注层（叠在最上层）=====
+        // 名称取值优先级：中文 → 拉丁转写 → 原始 name（coalesce 取首个非空）
         let nameField: [Any] = ["coalesce", ["get", "name:zh"], ["get", "name:latin"], ["get", "name"]]
 
         // 道路名（沿线排布）
@@ -123,6 +124,7 @@ enum OfflineVectorStyle {
             "layout": [
                 "text-field": nameField,
                 "text-font": fontStack,
+                // 双层插值：先按 zoom 取大端，再按 rank（1 重要→大字，10 次要→小字）细分
                 "text-size": ["interpolate", ["linear"], ["zoom"],
                               4, ["interpolate", ["linear"], ["get", "rank"], 1, 16.0, 10, 11.0],
                               12, ["interpolate", ["linear"], ["get", "rank"], 1, 24.0, 10, 14.0]],

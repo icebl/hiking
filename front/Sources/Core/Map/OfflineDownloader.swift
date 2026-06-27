@@ -11,19 +11,21 @@ struct TileRegion {
 final class OfflineDownloader: ObservableObject {
     enum Phase: Equatable { case idle, downloading, finished, cancelled, failed }
     @Published var phase: Phase = .idle
-    @Published var total = 0
-    @Published var done = 0
-    @Published var failed = 0
+    @Published var total = 0    // 待下载瓦片总数
+    @Published var done = 0     // 已成功写入数
+    @Published var failed = 0   // 重试后仍失败数（不阻断整体）
 
-    private var cancelled = false
+    private var cancelled = false   // 取消标志，下载循环每块开头检查
     // ESRI 世界影像（z/y/x 顺序）
     private let urlTemplate = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 
-    // MARK: - 瓦片数学（Web Mercator）
+    // MARK: - 瓦片数学（Web Mercator / 标准 slippy map z/x/y）
+    /// 经度 → 瓦片列号 x；n=2^z 为该级每行瓦片数，结果钳制在 [0, n-1]。
     static func tileX(_ lon: Double, _ z: Int) -> Int {
         let n = pow(2.0, Double(z))
         return min(Int(n) - 1, max(0, Int(floor((lon + 180) / 360 * n))))
     }
+    /// 纬度 → 瓦片行号 y（Web Mercator 投影公式）；y 随纬度增大而减小（北小南大）。
     static func tileY(_ lat: Double, _ z: Int) -> Int {
         let n = pow(2.0, Double(z))
         let r = lat * .pi / 180
@@ -47,8 +49,9 @@ final class OfflineDownloader: ObservableObject {
     static func estimateMB(_ region: TileRegion) -> Double { Double(tileCount(region)) * 20 / 1024 }
 
     // MARK: - 下载
-    func cancel() { cancelled = true }
+    func cancel() { cancelled = true }   // 仅置标志；run 循环在块边界响应
 
+    /// 启动后台下载：枚举瓦片 → 分块并发拉取 → 批量写入 dest 指向的 MBTiles。
     func start(region: TileRegion, dest: URL, name: String) {
         cancelled = false
         Task.detached { [weak self] in await self?.run(region: region, dest: dest, name: name) }
@@ -74,13 +77,13 @@ final class OfflineDownloader: ObservableObject {
         catch { await publish { self.phase = .failed }; return }
 
         // 分块并发下载（每块 maxConcurrent 并发，块间屏障）+ 批量写库
-        var pending: [(Int, Int, Int, Data)] = []
+        var pending: [(Int, Int, Int, Data)] = []   // 已下成功、待批量入库的瓦片
         var doneCount = 0, failCount = 0
-        let maxConcurrent = 6
+        let maxConcurrent = 6   // 单块并发数，兼顾速度与服务器/带宽压力
         let tmpl = urlTemplate
         var i = 0
         while i < tiles.count {
-            if cancelled { break }
+            if cancelled { break }   // 每块开头响应取消
             let chunk = Array(tiles[i..<min(i + maxConcurrent, tiles.count)])
             let results = await withTaskGroup(of: (Int, Int, Int, Data?).self) { group -> [(Int, Int, Int, Data?)] in
                 for t in chunk { group.addTask { (t.z, t.x, t.y, await Self.fetch(tmpl, t.z, t.x, t.y)) } }
@@ -91,7 +94,7 @@ final class OfflineDownloader: ObservableObject {
             for (z, x, y, d) in results {
                 if let d { pending.append((z, x, y, d)); doneCount += 1 } else { failCount += 1 }
             }
-            if pending.count >= 80 { try? flush(dbq, &pending) }
+            if pending.count >= 80 { try? flush(dbq, &pending) }   // 攒够一批再写，减少事务次数
             let dc = doneCount, fc = failCount
             await publish { self.done = dc; self.failed = fc }
             i += maxConcurrent
@@ -104,12 +107,13 @@ final class OfflineDownloader: ObservableObject {
         }
     }
 
+    /// 拉取单张瓦片；成功返回数据，失败/非 200/空数据返回 nil（由调用方计入 failed）。
     private static func fetch(_ template: String, _ z: Int, _ x: Int, _ y: Int) async -> Data? {
         let s = template.replacingOccurrences(of: "{z}", with: "\(z)")
             .replacingOccurrences(of: "{y}", with: "\(y)")
             .replacingOccurrences(of: "{x}", with: "\(x)")
         guard let url = URL(string: s) else { return nil }
-        for _ in 0..<2 {   // 重试一次
+        for _ in 0..<2 {   // 最多两次尝试（即失败重试一次）
             if let (data, resp) = try? await URLSession.shared.data(from: url),
                (resp as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty {
                 return data
@@ -118,6 +122,7 @@ final class OfflineDownloader: ObservableObject {
         return nil
     }
 
+    /// 建表并写入 MBTiles 标准 metadata（name/format/bounds/zoom 等），供日后读覆盖范围。
     private func initSchema(_ dbq: DatabaseQueue, region: TileRegion, name: String) throws {
         try dbq.write { db in
             try db.execute(sql: "CREATE TABLE IF NOT EXISTS metadata(name TEXT, value TEXT)")
@@ -137,6 +142,7 @@ final class OfflineDownloader: ObservableObject {
         }
     }
 
+    /// 把暂存瓦片批量写库并清空 pending（单事务，提升写入吞吐）。
     private func flush(_ dbq: DatabaseQueue, _ pending: inout [(Int, Int, Int, Data)]) throws {
         guard !pending.isEmpty else { return }
         let batch = pending; pending.removeAll(keepingCapacity: true)
@@ -149,5 +155,6 @@ final class OfflineDownloader: ObservableObject {
         }
     }
 
+    // 在主线程执行 block，统一更新 @Published 状态（后台任务里安全发布 UI 状态）
     @MainActor private func publish(_ block: @escaping () -> Void) { block() }
 }

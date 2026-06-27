@@ -3,14 +3,14 @@ import UIKit
 
 /// 沿轨迹导航（任务 4.5/4.7）：进入前选方向 + 同时记录 → 计划线 + 状态条 + 偏航横幅 + 长按结束。
 struct NavigationRunView: View {
-    let trackId: UUID
+    let trackId: UUID                              // 要导航的计划轨迹 id
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var ctrl = NavigationController()
-    @State private var started = false
-    @State private var reverse = false
+    @StateObject private var ctrl = NavigationController()  // 导航控制器，视图随其 @Published 刷新
+    @State private var started = false             // false 显示方向选择，true 显示导航中界面
+    @State private var reverse = false             // 用户所选方向：false 正向 / true 反向
     @State private var alsoRecord = AppSettings.recordWhileNav   // 导航同时记录实走（默认取设置）
-    @State private var showSaveDialog = false
-    @State private var showPermAlert = false
+    @State private var showSaveDialog = false      // 结束时若在记录，弹保存/不保存询问
+    @State private var showPermAlert = false       // 定位被拒提示弹窗
 
     var body: some View {
         ZStack {
@@ -36,6 +36,7 @@ struct NavigationRunView: View {
         }
     }
 
+    /// 确认权限后按所选方向/记录开关启动导航，切到导航中界面。
     private func beginNavigation() {
         let loc = LocationManager.shared
         if loc.denied { showPermAlert = true; return }
@@ -93,11 +94,13 @@ struct NavigationRunView: View {
         }
     }
 
+    /// 结束导航：若在同时记录则弹保存询问（由弹窗按钮收尾并 dismiss），否则直接停并退出。
     private func endNavigation() {
         if ctrl.isRecording { showSaveDialog = true }   // 弹保存询问（保存/不保存里 dismiss）
         else { ctrl.stop(); dismiss() }
     }
 
+    /// 顶部横幅小部件：文案 text + 背景色 bg（偏航/到达/航点接近共用）。
     private func banner(_ text: String, _ bg: Color) -> some View {
         Text(text).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
             .padding(10).frame(maxWidth: .infinity).background(bg).cornerRadius(12)

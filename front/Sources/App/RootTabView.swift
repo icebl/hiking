@@ -3,16 +3,17 @@ import SwiftUI
 /// 崩溃恢复协调器：启动检测到未结束的记录会话时驱动弹窗。
 final class RecoveryCoordinator: ObservableObject {
     static let shared = RecoveryCoordinator()
+    /// 待恢复的未结束会话；非 nil 时 RootTabView 弹出“上次记录未结束”对话框。
     @Published var session: RecordingSession?
 }
 
 /// 根导航：底部 4 Tab（首页/地图/轨迹/我的）。
 /// 地图为全屏沉浸、隐藏 Tab —— 用 fullScreenCover 承载（任务 0.5）。
 struct RootTabView: View {
-    @State private var selection = 0
-    @State private var cover: Cover?
-    @StateObject private var importer = ImportCoordinator.shared
-    @StateObject private var recovery = RecoveryCoordinator.shared
+    @State private var selection = 0                  // 当前选中 Tab（地图/轨迹会被拦截回首页）
+    @State private var cover: Cover?                  // 当前全屏覆盖目标；nil 表示无覆盖
+    @StateObject private var importer = ImportCoordinator.shared   // 外部文件导入协调（onOpenURL → 预览）
+    @StateObject private var recovery = RecoveryCoordinator.shared // 崩溃恢复协调（未结束会话续记）
 
     /// 全屏覆盖目标（地图 / 轨迹库 / 崩溃续记），合并为单一 item 避免多 cover 冲突。
     enum Cover: Identifiable {
@@ -44,6 +45,8 @@ struct RootTabView: View {
                 .tabItem { Label("我的", systemImage: "person.fill") }.tag(3)
         }
         .tint(AppColor.primary)
+        // 地图/轨迹 Tab 本身是空占位：选中即转成全屏覆盖，并把 selection 复位回首页（0），
+        // 这样关闭全屏后落回首页而非停在空白占位页。
         .onChange(of: selection) { new in
             if new == 1 { cover = .map; selection = 0 }       // 地图 → 全屏
             else if new == 2 { cover = .tracks; selection = 0 } // 轨迹 → 全屏

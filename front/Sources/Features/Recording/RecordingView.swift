@@ -3,12 +3,12 @@ import UIKit
 
 /// 记录中（任务 3.11）：地图 + 实时数据面板 + 暂停/结束。
 struct RecordingView: View {
-    var resumeSessionId: UUID? = nil
+    var resumeSessionId: UUID? = nil                       // 非空表示崩溃恢复·续记该会话；nil 为全新记录
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var ctrl = RecordingController()
-    @State private var showPermAlert = false
-    @State private var showMarkDialog = false
-    @State private var markToast: String?
+    @StateObject private var ctrl = RecordingController()  // 持有记录控制器，视图随其 @Published 刷新
+    @State private var showPermAlert = false               // 定位被拒提示弹窗
+    @State private var showMarkDialog = false              // 打点类型选择弹窗
+    @State private var markToast: String?                  // 打点结果轻提示文案（短暂显示后自动消失）
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,6 +84,7 @@ struct RecordingView: View {
         }
     }
 
+    /// 进入页面后的启动流程：先确认定位权限，再按 resumeSessionId 决定续记或全新开始。
     private func startFlow() {
         let loc = LocationManager.shared
         if loc.denied { showPermAlert = true; return }
@@ -101,10 +102,12 @@ struct RecordingView: View {
         }
     }
 
+    /// 秒数格式化为 HH:MM:SS。
     private func timeString(_ s: TimeInterval) -> String {
         let t = Int(s); return String(format: "%02d:%02d:%02d", t / 3600, (t % 3600) / 60, t % 60)
     }
 
+    /// 单项统计小部件：数值 v + 标签 l + 配色 c。
     private func metric(_ v: String, _ l: String, _ c: Color) -> some View {
         VStack(spacing: 2) {
             Text(v).font(.dataMid()).foregroundColor(c).lineLimit(1).minimumScaleFactor(0.6)

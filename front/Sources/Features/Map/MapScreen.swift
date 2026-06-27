@@ -7,29 +7,31 @@ import CoreLocation
 ///   右列：图层 / 叠加 / 工具 / 缩放(+/-) / 缩放滑块 / 公里标
 struct MapScreen: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var mapCtrl = MapController()
-    @State private var showRecording = false
-    @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）
-    @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1）
+    @StateObject private var mapCtrl = MapController()      // 地图实例与缩放/定位状态的桥接控制器
+    @State private var showRecording = false               // 是否弹出全屏「记录」页
+    @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）；nil 表示未点/已关闭
+    @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1），1=最大
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
     @State private var showRoadNetwork = false   // 路网开关（仅离线矢量底图有效）
-    @State private var baseMode: MapBaseMode = .onlineRaster
-    @State private var showLayerSheet = false
+    @State private var baseMode: MapBaseMode = .onlineRaster  // 当前底图：默认在线影像，可切离线矢量
+    @State private var showLayerSheet = false                // 是否弹出底图选择对话框
     // 工具箱：测距 / 面积 / 距离雷达
-    enum MeasureMode { case none, distance, area }
+    enum MeasureMode { case none, distance, area }           // 测量模式：无 / 测距(折线) / 面积(多边形)
     @State private var measure: MeasureMode = .none
-    @State private var measurePoints: [CLLocationCoordinate2D] = []
-    @State private var showRadar = false
-    @State private var showToolSheet = false
+    @State private var measurePoints: [CLLocationCoordinate2D] = []  // 测量时按点击顺序累积的坐标点
+    @State private var showRadar = false                     // 距离雷达（以当前定位为中心的同心圈）开关
+    @State private var showToolSheet = false                 // 是否弹出工具箱对话框
 
     var body: some View {
         ZStack {
+            // 底图视图：把上面各开关/状态下传给原生地图渲染
             MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
                          showRoadNetwork: showRoadNetwork,
                          onTap: { c in
+                             // 测量进行中：点击落点累积进折线/多边形；否则只读取经纬度显示
                              if measure != .none { measurePoints.append(c) }
                              else { tapped = CoordFormatter.string(c, format: AppSettings.coordFormat) }
                          })
@@ -117,6 +119,7 @@ struct MapScreen: View {
             }
         }
         .fullScreenCover(isPresented: $showRecording) { RecordingView() }
+        // 工具箱对话框：切换测量模式都会清空已有点并关闭经纬度读数，避免状态串扰
         .confirmationDialog("工具箱", isPresented: $showToolSheet, titleVisibility: .visible) {
             Button("测距") { measure = .distance; measurePoints = []; tapped = nil }
             Button("面积") { measure = .area; measurePoints = []; tapped = nil }
@@ -124,11 +127,12 @@ struct MapScreen: View {
             if measure != .none { Button("退出测量", role: .destructive) { measure = .none; measurePoints = [] } }
             Button("取消", role: .cancel) {}
         } message: { Text("点击地图连点测量；距离雷达以当前定位为中心显示同心圈") }
+        // 底图选择对话框：固定一项在线影像 + 动态列出本地已导入的矢量包
         .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
             Button("在线影像（ESRI，含已缓存离线区域）") { baseMode = .onlineRaster }
             ForEach(OfflineMaps.list().filter { OfflineMaps.isVectorBase($0) }, id: \.self) { url in
                 Button("离线矢量 · \(url.deletingPathExtension().lastPathComponent)") {
-                    baseMode = .offlineVector(path: url.path)
+                    baseMode = .offlineVector(path: url.path)   // 切到该矢量包作为底图
                 }
             }
             Button("取消", role: .cancel) {}
@@ -145,6 +149,7 @@ struct MapScreen: View {
         return false
     }
 
+    /// 切换等高线：缺等高线包时不切换，借用经纬度读数条提示去导入；有包才真正开关。
     private func toggleContours() {
         if OfflineMaps.contourPack() == nil {
             tapped = "未导入等高线包（我的 → 离线地图 导入 *contour*.pmtiles）"
@@ -153,10 +158,12 @@ struct MapScreen: View {
         }
     }
 
+    /// 测量结果条（测距/面积模式时显示在底部）：左侧实时读数，右侧后退/清除/退出。
     private var measureBar: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(measure == .area ? "面积" : "测距").font(.caption).foregroundColor(.white.opacity(0.8))
+                // 按当前模式选用多边形面积或折线总长，再格式化为带单位文本
                 Text(measure == .area ? Measure.areaText(Measure.polygonArea(measurePoints))
                                       : Measure.distanceText(Measure.totalDistance(measurePoints)))
                     .font(.system(size: 18, weight: .bold)).foregroundColor(.white)
@@ -183,6 +190,7 @@ struct MapScreen: View {
         .background(Color.black.opacity(0.78)).cornerRadius(12)
     }
 
+    /// 顶部信息条：坐标系标识 + 示例经纬度/海拔（当前为占位静态文案，待接入实时定位）。
     private var infoBar: some View {
         (Text("WGS84").foregroundColor(Color(hex: 0x7EE0A6)).fontWeight(.bold)
          + Text(" 41.6950°N 123.3443°E · 海拔39m").foregroundColor(.white))
@@ -219,12 +227,13 @@ struct MapScreen: View {
                 Text(String(format: "%.0f", mapCtrl.zoom))
                     .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
             }
-            .offset(y: CGFloat(1 - zoomLevel) * 83)
+            .offset(y: CGFloat(1 - zoomLevel) * 83)   // zoomLevel=1 时圆点在顶端，越大越上
         }
         .frame(width: 30, height: 113)
         .contentShape(Rectangle())
         .gesture(
             DragGesture().onChanged { v in
+                // 触点 y 反转归一化为 0…1：顶部=1(最大缩放)，底部=0；再驱动地图缩放
                 let frac = 1 - Double(v.location.y) / 113
                 zoomLevel = min(1, max(0, frac))
                 mapCtrl.setZoom(fraction: zoomLevel)

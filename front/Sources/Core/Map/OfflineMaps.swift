@@ -11,6 +11,7 @@ enum MapBaseMode: Equatable {
 
 /// 离线包管理（任务 2.7 / A 段）：Documents/offline/*.pmtiles 的导入、列举、删除。
 enum OfflineMaps {
+    /// 离线包根目录 Documents/offline；读取时顺带确保目录存在。
     static var dir: URL {
         let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("offline", isDirectory: true)
@@ -35,10 +36,11 @@ enum OfflineMaps {
     /// 导入（拷贝到 offline 目录），返回目标 URL。
     @discardableResult
     static func importPack(from src: URL) throws -> URL {
+        // 文件选择器返回的 URL 受沙盒保护，访问前后须成对开/关安全作用域
         let scoped = src.startAccessingSecurityScopedResource()
         defer { if scoped { src.stopAccessingSecurityScopedResource() } }
         let dest = dir.appendingPathComponent(src.lastPathComponent)
-        if FileManager.default.fileExists(atPath: dest.path) {
+        if FileManager.default.fileExists(atPath: dest.path) {   // 同名先删，实现覆盖导入
             try FileManager.default.removeItem(at: dest)
         }
         try FileManager.default.copyItem(at: src, to: dest)
@@ -68,7 +70,8 @@ enum OfflineMaps {
         guard let str else { return nil }
         let p = str.split(separator: ",").compactMap { Double($0) }
         guard p.count == 4 else { return nil }
-        return (CLLocationCoordinate2D(latitude: p[1], longitude: p[0]),
-                CLLocationCoordinate2D(latitude: p[3], longitude: p[2]))
+        // metadata.bounds 顺序为 minLon,minLat,maxLon,maxLat → 组装西南/东北角
+        return (CLLocationCoordinate2D(latitude: p[1], longitude: p[0]),   // SW
+                CLLocationCoordinate2D(latitude: p[3], longitude: p[2]))   // NE
     }
 }

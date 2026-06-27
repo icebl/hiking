@@ -4,21 +4,21 @@ import SwiftUI
 ///   右列：图层(占位) / 工具(占位) / 缩放± / 滑块 / 公里标
 ///   左列：回到原点（重新框住轨迹）
 struct MapControlsOverlay: View {
-    @ObservedObject var controller: MapController
-    @Binding var showKm: Bool
-    var showContours: Bool = false
-    var hasProfile: Bool = false
-    var showProfile: Bool = false
+    @ObservedObject var controller: MapController   // 复用同一地图控制器，读缩放/定位状态并下发操作
+    @Binding var showKm: Bool                       // 公里标开关（由父视图持有）
+    var showContours: Bool = false                  // 等高线高亮态（仅显示用，开关动作走 onContours）
+    var hasProfile: Bool = false                    // 是否有高程剖面数据，决定剖面控件是否出现
+    var showProfile: Bool = false                   // 剖面面板当前是否展开（高亮态）
     /// 路网开关（仅离线矢量底图有效）；showRoadNetwork 绑定，isVectorBase 控制是否显示该控件。
     var isVectorBase: Bool = false
     @Binding var showRoadNetwork: Bool
     /// 标记点显隐开关；hasWaypoints 控制是否显示该控件。
     var hasWaypoints: Bool = false
     @Binding var showWaypoints: Bool
-    var onPlaceholder: (String) -> Void = { _ in }
-    var onLayers: () -> Void = {}
-    var onContours: () -> Void = {}
-    var onProfile: () -> Void = {}
+    var onPlaceholder: (String) -> Void = { _ in }  // 占位功能点击回调（如未开放的工具）
+    var onLayers: () -> Void = {}                   // 点「图层」回调（切底图，由父视图实现）
+    var onContours: () -> Void = {}                 // 点「等高线」回调
+    var onProfile: () -> Void = {}                  // 点「剖面」回调（展开/收起剖面面板）
 
     var body: some View {
         ZStack {
@@ -80,7 +80,9 @@ struct MapControlsOverlay: View {
         .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
     }
 
+    /// 缩放滑块：与 MapScreen 不同，这里由地图当前 zoom 在 [minZoom,maxZoom] 的占比反推圆点位置。
     private var zoomSlider: some View {
+        // 把当前缩放级别归一化到 0…1；区间无效时取中点 0.5
         let frac = (controller.maxZoom - controller.minZoom) > 0
             ? (controller.zoom - controller.minZoom) / (controller.maxZoom - controller.minZoom) : 0.5
         return ZStack(alignment: .top) {
