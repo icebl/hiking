@@ -85,11 +85,11 @@ final class RecordingController: ObservableObject {
     }
 
     /// 记录途中打点（快速选类型）：在最近有效定位处落一个航点，名称自动 = 类型+序号。
-    /// 无可用坐标（定位未就绪）返回 false。
+    /// 返回新建的航点（供拍照打点拿 id 关联照片）；无可用坐标（定位未就绪）返回 nil。
     @discardableResult
-    func addWaypoint(kind: WaypointKind) -> Bool {
-        guard let id = trackId else { return false }
-        guard let c = lastLocation?.coordinate ?? liveCoordinates.last else { return false }
+    func addWaypoint(kind: WaypointKind) -> Waypoint? {
+        guard let id = trackId else { return nil }
+        guard let c = lastLocation?.coordinate ?? liveCoordinates.last else { return nil }
         let w = Waypoint(id: UUID(), trackId: id, name: "\(kind.label)\(waypointCount + 1)",
                          kind: kind, lat: c.latitude, lon: c.longitude,
                          elevation: currentElevation, note: nil,
@@ -97,7 +97,7 @@ final class RecordingController: ObservableObject {
         try? repo.addWaypoint(w)
         waypoints.append(w)              // 记录页地图实时显示
         waypointCount += 1
-        return true
+        return w
     }
 
     /// 手动暂停：停止累计用时与采点，写盘会话状态以便崩溃恢复。

@@ -58,6 +58,9 @@ targets:
           - location
         # —— 气压计海拔 ——
         NSMotionUsageDescription: 使用气压计获取更稳定的海拔数据。
+        # —— 拍照打点 ——
+        NSCameraUsageDescription: 记录途中拍照打点，需要使用相机。
+        NSPhotoLibraryUsageDescription: 无相机时从相册选取照片作为标注点配图。
         # —— 文件导入：声明“本 App 能打开”这些类型（微信/系统“用本应用打开”出现入口）——
         CFBundleDocumentTypes:
           - CFBundleTypeName: 轨迹文件

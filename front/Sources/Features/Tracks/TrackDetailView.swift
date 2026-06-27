@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import CoreLocation
 
 /// 轨迹详情（任务 6.2 / 5.6）：地图 / 详情 页签 + 操作（导出/导航）。
@@ -36,6 +37,7 @@ struct TrackDetailView: View {
     @State private var showEditWaypoint = false         // 是否弹出编辑航点 alert
     @State private var kindPickWaypoint: Waypoint?      // 正在更改类型的航点
     @State private var showKindDialog = false           // 是否弹出类型选择面板
+    @State private var viewerImage: UIImage?            // 正在全屏查看的航点照片（nil=不显示）
 
     // body 拆分：导航栏修饰留在 body，内容与各类弹窗下放到 content/子视图，
     // 避免单个表达式过大触发「类型检查超时」。
@@ -121,28 +123,22 @@ struct TrackDetailView: View {
                     .padding(.vertical, 8)
             } else {
                 ForEach(waypoints) { w in
-                    // 点击航点：设为居中目标并切回地图页，让地图把该点移到中心
-                    Button { focusWaypoint = w; tab = 0 } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: w.kind.icon)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(width: 30, height: 30)
-                                .background(w.kind.color).clipShape(Circle())
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(w.name).foregroundColor(AppColor.ink)
-                                if let note = w.note, !note.isEmpty {
-                                    Text(note).font(.caption).foregroundColor(AppColor.ink2)
-                                } else if let e = w.elevation {
-                                    Text("海拔 \(Int(e)) m").font(.caption).foregroundColor(AppColor.ink2)
-                                }
+                    // 行点击居中地图；前导若有照片则显示缩略图（点缩略图看大图，不触发居中）
+                    HStack(spacing: 12) {
+                        wpLeading(w)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(w.name).foregroundColor(AppColor.ink)
+                            if let note = w.note, !note.isEmpty {
+                                Text(note).font(.caption).foregroundColor(AppColor.ink2)
+                            } else if let e = w.elevation {
+                                Text("海拔 \(Int(e)) m").font(.caption).foregroundColor(AppColor.ink2)
                             }
-                            Spacer()
-                            Image(systemName: "scope").font(.caption).foregroundColor(AppColor.ink2)
                         }
-                        .contentShape(Rectangle())
+                        Spacer()
+                        Image(systemName: "scope").font(.caption).foregroundColor(AppColor.ink2)
                     }
-                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .onTapGesture { focusWaypoint = w; tab = 0 }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) { deleteWaypoint(w) } label: { Label("删除", systemImage: "trash") }
                         Button { startWaypointEdit(w) } label: { Label("编辑", systemImage: "pencil") }.tint(AppColor.info)
@@ -167,15 +163,47 @@ struct TrackDetailView: View {
             }
             Button("取消", role: .cancel) {}
         }
+        // 航点照片全屏查看
+        .fullScreenCover(isPresented: Binding(get: { viewerImage != nil },
+                                              set: { if !$0 { viewerImage = nil } })) {
+            photoViewer
+        }
+    }
+
+    /// 航点行前导：有照片显示缩略图（点开看大图），否则显示类型彩色图标圆。
+    @ViewBuilder private func wpLeading(_ w: Waypoint) -> some View {
+        if let img = WaypointPhotoStore.load(w.id) {
+            Image(uiImage: img).resizable().scaledToFill()
+                .frame(width: 38, height: 38).clipShape(RoundedRectangle(cornerRadius: 7))
+                .onTapGesture { viewerImage = img }
+        } else {
+            Image(systemName: w.kind.icon)
+                .font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                .frame(width: 30, height: 30).background(w.kind.color).clipShape(Circle())
+        }
+    }
+
+    /// 照片全屏查看器：黑底等比展示 + 右上关闭。
+    @ViewBuilder private var photoViewer: some View {
+        if let img = viewerImage {
+            ZStack(alignment: .topTrailing) {
+                Color.black.ignoresSafeArea()
+                Image(uiImage: img).resizable().scaledToFit().ignoresSafeArea()
+                Button { viewerImage = nil } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundColor(.white.opacity(0.9))
+                }.padding()
+            }
+        }
     }
 
     /// 从仓库重新拉取航点列表（增删改后刷新 UI）。
     private func reloadWaypoints() {
         waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
     }
-    /// 删除航点并刷新列表。
+    /// 删除航点并刷新列表；一并清理其照片文件。
     private func deleteWaypoint(_ w: Waypoint) {
         try? TrackRepository().deleteWaypoint(id: w.id)
+        WaypointPhotoStore.delete(w.id)
         reloadWaypoints()
     }
     /// 进入航点编辑：预填名称/备注并弹出编辑 alert。

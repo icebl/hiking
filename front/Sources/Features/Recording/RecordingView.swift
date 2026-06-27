@@ -8,6 +8,7 @@ struct RecordingView: View {
     @StateObject private var ctrl = RecordingController()  // 持有记录控制器，视图随其 @Published 刷新
     @State private var showPermAlert = false               // 定位被拒提示弹窗
     @State private var showMarkDialog = false              // 打点类型选择弹窗
+    @State private var showCamera = false                  // 拍照打点：相机选择器
     @State private var markToast: String?                  // 打点结果轻提示文案（短暂显示后自动消失）
 
     var body: some View {
@@ -76,6 +77,10 @@ struct RecordingView: View {
             }
             Button("取消", role: .cancel) {}
         } message: { Text("在当前位置打一个标注点") }
+        .sheet(isPresented: $showCamera) {
+            // 拍照打点：拍到图后落「拍照」航点并把照片按其 id 存盘
+            CameraPicker { img in capturePhoto(img) }
+        }
         .alert("需要定位权限", isPresented: $showPermAlert) {
             Button("去设置") { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
             Button("取消", role: .cancel) { dismiss() }
@@ -92,10 +97,22 @@ struct RecordingView: View {
         if let resumeSessionId { ctrl.resume(sessionId: resumeSessionId) } else { ctrl.start() }
     }
 
-    /// 打点：在当前位置落标注点，给一次轻提示。
+    /// 打点：在当前位置落标注点，给一次轻提示。拍照类型先开相机，拍到再落点（见 capturePhoto）。
     private func mark(_ kind: WaypointKind) {
-        let ok = ctrl.addWaypoint(kind: kind)
-        let msg = ok ? "已标注：\(kind.label)" : "定位未就绪，稍后再试"
+        if kind == .photo { showCamera = true; return }
+        let ok = ctrl.addWaypoint(kind: kind) != nil
+        toast(ok ? "已标注：\(kind.label)" : "定位未就绪，稍后再试")
+    }
+
+    /// 拍照回调：落一个「拍照」航点并把照片按其 id 存盘。
+    private func capturePhoto(_ image: UIImage) {
+        guard let w = ctrl.addWaypoint(kind: .photo) else { toast("定位未就绪，稍后再试"); return }
+        WaypointPhotoStore.save(image, id: w.id)
+        toast("已拍照标注")
+    }
+
+    /// 顶部轻提示：显示一句话并 1.5s 后自动消失。
+    private func toast(_ msg: String) {
         withAnimation { markToast = msg }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             withAnimation { if markToast == msg { markToast = nil } }
