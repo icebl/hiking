@@ -30,6 +30,10 @@ struct MapLibreView: UIViewRepresentable {
     var showRadar: Bool = false
     /// 路网图层（仅离线矢量底图有效）：醒目橙色徒步路径，开关控制。
     var showRoadNetwork: Bool = false
+    /// 航点/标注点（按 kind 上色显示，点击弹名称气泡）。
+    var waypoints: [Waypoint] = []
+    /// 居中目标（如从标注点列表点击某点 → 地图居中）；变化时触发一次居中。
+    var centerOn: CLLocationCoordinate2D? = nil
     /// 点击地图回调（取经纬度，任务 2.8）
     var onTap: ((CLLocationCoordinate2D) -> Void)? = nil
 
@@ -79,6 +83,8 @@ struct MapLibreView: UIViewRepresentable {
         coord.updateMeasure(on: map)
         coord.updateRadar(on: map)
         coord.updateRoadNetwork(on: map)
+        coord.updateWaypoints(on: map)
+        coord.updateCenter(on: map)
     }
 
     /// 按底图模式返回 styleURL：在线=空 style(随后加栅格)，离线=矢量 PMTiles 样式。
@@ -136,6 +142,7 @@ struct MapLibreView: UIViewRepresentable {
             updateMeasure(on: mapView)
             updateRadar(on: mapView)
             updateRoadNetwork(on: mapView)  // 路网层可见性（离线矢量样式自带该层）
+            updateWaypoints(on: mapView)    // 航点标注（跨样式重载存活，靠签名去重）
             parent.controller?.zoom = mapView.zoomLevel
         }
 
@@ -146,7 +153,13 @@ struct MapLibreView: UIViewRepresentable {
             if let k = annotation as? KmAnnotation { return KmMarkerView(km: k.km) }
             if annotation is HighlightAnnotation { return HighlightMarkerView() }
             if let r = annotation as? RadarLabelAnnotation { return RadarLabelView(text: r.text) }
+            if let w = annotation as? WaypointAnnotation { return WaypointMarkerView(kind: w.kind) }
             return nil
+        }
+
+        // 航点标注可弹名称气泡（callout）。
+        func mapView(_ mapView: MLNMapView, annotationCanShowCallout annotation: MLNAnnotation) -> Bool {
+            annotation is WaypointAnnotation
         }
 
         // 跟随模式变化（用户拖动会打断 .follow）→ 同步定位键高亮
@@ -399,6 +412,39 @@ struct MapLibreView: UIViewRepresentable {
             layer.isVisible = parent.showRoadNetwork
         }
 
+        private var waypointAnnotations: [MLNAnnotation] = []
+        private var waypointSig: [String] = []
+
+        /// 航点标注：按 (id|kind|name) 签名去重，仅在变化时重建（避免每次 update 闪烁/重复）。
+        func updateWaypoints(on map: MLNMapView) {
+            let sig = parent.waypoints.map { "\($0.id.uuidString)|\($0.kind.rawValue)|\($0.name)" }
+            guard sig != waypointSig else { return }
+            waypointSig = sig
+            if !waypointAnnotations.isEmpty { map.removeAnnotations(waypointAnnotations); waypointAnnotations = [] }
+            guard !parent.waypoints.isEmpty else { return }
+            let anns = parent.waypoints.map { w -> WaypointAnnotation in
+                let a = WaypointAnnotation()
+                a.coordinate = CLLocationCoordinate2D(latitude: w.lat, longitude: w.lon)
+                a.kind = w.kind
+                a.title = w.name
+                if let note = w.note, !note.isEmpty { a.subtitle = note }
+                else if let e = w.elevation { a.subtitle = "海拔 \(Int(e)) m" }
+                return a
+            }
+            map.addAnnotations(anns)
+            waypointAnnotations = anns
+        }
+
+        private var lastCenter: CLLocationCoordinate2D?
+
+        /// 居中到目标点（标注点列表点击联动）：仅在 centerOn 变化时居中一次。
+        func updateCenter(on map: MLNMapView) {
+            guard let c = parent.centerOn else { return }
+            if let l = lastCenter, l.latitude == c.latitude, l.longitude == c.longitude { return }
+            lastCenter = c
+            map.setCenter(c, zoomLevel: max(map.zoomLevel, 15), animated: true)
+        }
+
         /// 等高线叠加层（任务 2.5）：青色细线 + 计曲线(idx==1)加粗；叠在底图之上、轨迹之下。
         func updateContours(on map: MLNMapView) {
             guard let style = map.style else { return }
@@ -539,6 +585,31 @@ final class HighlightAnnotation: MLNPointAnnotation {}
 
 /// 距离雷达半径标注。
 final class RadarLabelAnnotation: MLNPointAnnotation { var text = "" }
+
+/// 航点/标注点数据（带类型，决定颜色与图标）。
+final class WaypointAnnotation: MLNPointAnnotation {
+    var kind: WaypointKind = .other
+}
+
+/// 航点标注视图：圆底按 kind 上色 + 白色 SF Symbol 图标 + 白描边。
+final class WaypointMarkerView: MLNAnnotationView {
+    init(kind: WaypointKind) {
+        super.init(reuseIdentifier: "wp-\(kind.rawValue)")
+        frame = CGRect(x: 0, y: 0, width: 30, height: 30)
+        layer.backgroundColor = kind.uiColor.cgColor
+        layer.cornerRadius = 15
+        layer.borderColor = UIColor.white.cgColor
+        layer.borderWidth = 2
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.3; layer.shadowRadius = 2; layer.shadowOffset = .zero
+        let iv = UIImageView(frame: bounds.insetBy(dx: 7, dy: 7))
+        iv.image = UIImage(systemName: kind.icon)?.withRenderingMode(.alwaysTemplate)
+        iv.tintColor = .white
+        iv.contentMode = .scaleAspectFit
+        addSubview(iv)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
 
 /// 雷达半径标签视图（青色胶囊）。
 final class RadarLabelView: MLNAnnotationView {

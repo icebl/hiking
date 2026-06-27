@@ -20,8 +20,9 @@ struct GPXService {
 
         let waypoints: [Waypoint] = gpx.waypoints.compactMap { wpt in
             guard let lat = wpt.latitude, let lon = wpt.longitude else { return nil }
-            var w = Waypoint(id: UUID(), trackId: nil, name: wpt.name ?? "航点",
-                             kind: .other, lat: lat, lon: lon, elevation: wpt.elevation,
+            let kind = WaypointKind(rawValue: wpt.type ?? "") ?? .other   // 导入保留类型
+            let w = Waypoint(id: UUID(), trackId: nil, name: wpt.name ?? "航点",
+                             kind: kind, lat: lat, lon: lon, elevation: wpt.elevation,
                              note: wpt.desc, createdAt: Date(), updatedAt: Date(),
                              isDeleted: false, isSynced: false)
             return w
@@ -76,6 +77,7 @@ struct GPXService {
         for w in waypoints {
             let wp = GPXWaypoint(latitude: w.lat, longitude: w.lon)
             wp.name = w.name; wp.elevation = w.elevation; wp.desc = w.note
+            wp.type = w.kind.rawValue            // 导出保留类型（<type>）
             root.add(waypoint: wp)
         }
 

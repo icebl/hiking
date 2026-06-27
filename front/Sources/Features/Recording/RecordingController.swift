@@ -15,6 +15,7 @@ final class RecordingController: ObservableObject {
     @Published var pointCount: Int = 0
     @Published var isAutoPaused = false          // 静止自动暂停
     @Published var liveCoordinates: [CLLocationCoordinate2D] = []  // 记录中实时画线
+    @Published var waypointCount = 0             // 本次记录已打标注点数
 
     private let location = LocationManager.shared
     private let altimeter = AltimeterManager()
@@ -75,7 +76,23 @@ final class RecordingController: ObservableObject {
             lastEle = last.elevation
         }
         lastLocation = nil                        // 不跨崩溃间隔计距离
+        waypointCount = (try? repo.waypoints(trackId: s.id))?.count ?? 0
         beginSensors()
+    }
+
+    /// 记录途中打点（快速选类型）：在最近有效定位处落一个航点，名称自动 = 类型+序号。
+    /// 无可用坐标（定位未就绪）返回 false。
+    @discardableResult
+    func addWaypoint(kind: WaypointKind) -> Bool {
+        guard let id = trackId else { return false }
+        guard let c = lastLocation?.coordinate ?? liveCoordinates.last else { return false }
+        let w = Waypoint(id: UUID(), trackId: id, name: "\(kind.label)\(waypointCount + 1)",
+                         kind: kind, lat: c.latitude, lon: c.longitude,
+                         elevation: currentElevation, note: nil,
+                         createdAt: Date(), updatedAt: Date(), isDeleted: false, isSynced: false)
+        try? repo.addWaypoint(w)
+        waypointCount += 1
+        return true
     }
 
     func pause() { state = .paused; persistSessionState() }
@@ -231,7 +248,7 @@ final class RecordingController: ObservableObject {
         state = .idle; distance = 0; movingTime = 0; ascent = 0; descent = 0
         pointCount = 0; currentElevation = nil; isAutoPaused = false
         liveCoordinates = []; buffer = []; lastLocation = nil; lastEle = nil
-        trackId = nil; session = nil; currentSegment = 0; currentSeq = 0
+        trackId = nil; session = nil; currentSegment = 0; currentSeq = 0; waypointCount = 0
     }
 
     private func defaultName() -> String {

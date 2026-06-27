@@ -142,7 +142,35 @@ struct TrackRepository {
         try db.dbQueue.read { dbx in
             try Waypoint
                 .filter(Column("trackId") == trackId.uuidString && Column("isDeleted") == false)
+                .order(Column("createdAt"))
                 .fetchAll(dbx)
+        }
+    }
+
+    /// 新增单个航点（记录中打点）。
+    func addWaypoint(_ w: Waypoint) throws {
+        try db.dbQueue.write { dbx in var x = w; x.updatedAt = Date(); try x.save(dbx) }
+    }
+
+    /// 编辑航点名称/备注/类型（详情页标注点管理）。
+    func updateWaypoint(id: UUID, name: String, note: String?, kind: WaypointKind) throws {
+        _ = try db.dbQueue.write { dbx in
+            try Waypoint.filter(key: id.uuidString).updateAll(dbx,
+                Column("name").set(to: name),
+                Column("note").set(to: note),
+                Column("kind").set(to: kind.rawValue),
+                Column("isSynced").set(to: false),
+                Column("updatedAt").set(to: Date()))
+        }
+    }
+
+    /// 软删除航点（保留同步删除状态，仿 softDelete）。
+    func deleteWaypoint(id: UUID) throws {
+        _ = try db.dbQueue.write { dbx in
+            try Waypoint.filter(key: id.uuidString).updateAll(dbx,
+                Column("isDeleted").set(to: true),
+                Column("isSynced").set(to: false),
+                Column("updatedAt").set(to: Date()))
         }
     }
 

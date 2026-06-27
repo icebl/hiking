@@ -26,10 +26,18 @@ struct TrackDetailView: View {
     @State private var showRename = false
     @State private var renameText = ""
     @State private var showDeleteConfirm = false
+    // 标注点（航点）管理
+    @State private var focusWaypoint: Waypoint?         // 列表点击 → 地图居中目标
+    @State private var editingWaypoint: Waypoint?
+    @State private var editWpName = ""
+    @State private var editWpNote = ""
+    @State private var showEditWaypoint = false
+    @State private var kindPickWaypoint: Waypoint?
+    @State private var showKindDialog = false
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $tab) { Text("地图").tag(0); Text("详情").tag(1) }
+            Picker("", selection: $tab) { Text("地图").tag(0); Text("详情").tag(1); Text("标注点").tag(2) }
                 .pickerStyle(.segmented).padding()
 
             if tab == 0 {
@@ -40,7 +48,9 @@ struct TrackDetailView: View {
                                      showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                                      highlightCoordinate: selectedProfileIndex.flatMap {
                                          profile.indices.contains($0) ? profile[$0].coord : nil },
-                                     showRoadNetwork: showRoadNetwork)
+                                     showRoadNetwork: showRoadNetwork,
+                                     waypoints: waypoints,
+                                     centerOn: focusWaypoint.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
                         MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
                                            hasProfile: !profile.isEmpty, showProfile: showProfile,
                                            isVectorBase: isVectorBase, showRoadNetwork: $showRoadNetwork,
@@ -66,8 +76,10 @@ struct TrackDetailView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
-            } else {
+            } else if tab == 1 {
                 statsList
+            } else {
+                waypointList
             }
 
             // 显示海拔剖面时隐藏底部按钮（给剖面让出空间）；隐藏剖面/切到详情页时显示。
@@ -132,6 +144,84 @@ struct TrackDetailView: View {
         } message: {
             Text("卫星离线：在「在线影像」底图下，已下载区域断网自动显示")
         }
+        .alert("编辑标注点", isPresented: $showEditWaypoint) {
+            TextField("名称", text: $editWpName)
+            TextField("备注（可选）", text: $editWpNote)
+            Button("保存") { saveWaypointEdit() }
+            Button("取消", role: .cancel) {}
+        }
+        .confirmationDialog("更改类型", isPresented: $showKindDialog, titleVisibility: .visible) {
+            ForEach(WaypointKind.allOrdered, id: \.self) { k in
+                Button(k.label) { changeWaypointKind(to: k) }
+            }
+            Button("取消", role: .cancel) {}
+        }
+    }
+
+    /// 标注点页：航点列表（点击居中、左滑删除/编辑、改类型）。
+    private var waypointList: some View {
+        List {
+            if waypoints.isEmpty {
+                Text("暂无标注点。记录途中点「打点」，或导入含航点的 GPX。")
+                    .foregroundColor(AppColor.ink2).font(.subheadline)
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(waypoints) { w in
+                    Button { focusWaypoint = w; tab = 0 } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: w.kind.icon)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 30, height: 30)
+                                .background(w.kind.color).clipShape(Circle())
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(w.name).foregroundColor(AppColor.ink)
+                                if let note = w.note, !note.isEmpty {
+                                    Text(note).font(.caption).foregroundColor(AppColor.ink2)
+                                } else if let e = w.elevation {
+                                    Text("海拔 \(Int(e)) m").font(.caption).foregroundColor(AppColor.ink2)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "scope").font(.caption).foregroundColor(AppColor.ink2)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) { deleteWaypoint(w) } label: { Label("删除", systemImage: "trash") }
+                        Button { startWaypointEdit(w) } label: { Label("编辑", systemImage: "pencil") }.tint(AppColor.info)
+                    }
+                    .swipeActions(edge: .leading) {
+                        Button { kindPickWaypoint = w; showKindDialog = true } label: { Label("类型", systemImage: "tag") }
+                            .tint(AppColor.warning)
+                    }
+                }
+            }
+        }
+    }
+
+    private func reloadWaypoints() {
+        waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
+    }
+    private func deleteWaypoint(_ w: Waypoint) {
+        try? TrackRepository().deleteWaypoint(id: w.id)
+        reloadWaypoints()
+    }
+    private func startWaypointEdit(_ w: Waypoint) {
+        editingWaypoint = w; editWpName = w.name; editWpNote = w.note ?? ""; showEditWaypoint = true
+    }
+    private func saveWaypointEdit() {
+        guard let w = editingWaypoint else { return }
+        let n = editWpName.trimmingCharacters(in: .whitespaces)
+        try? TrackRepository().updateWaypoint(id: w.id, name: n.isEmpty ? w.name : n,
+                                              note: editWpNote.isEmpty ? nil : editWpNote, kind: w.kind)
+        editingWaypoint = nil; reloadWaypoints()
+    }
+    private func changeWaypointKind(to kind: WaypointKind) {
+        guard let w = kindPickWaypoint else { return }
+        try? TrackRepository().updateWaypoint(id: w.id, name: w.name, note: w.note, kind: kind)
+        kindPickWaypoint = nil; reloadWaypoints()
     }
 
     /// 当前是否为离线矢量底图（路网控件仅此模式显示）。
