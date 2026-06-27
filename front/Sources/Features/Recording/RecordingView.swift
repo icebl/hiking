@@ -13,7 +13,8 @@ struct RecordingView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                MapLibreView(trackCoordinates: ctrl.liveCoordinates, showsUserLocation: true)
+                MapLibreView(trackCoordinates: ctrl.liveCoordinates, showsUserLocation: true,
+                             waypoints: ctrl.waypoints)
                     .frame(maxHeight: .infinity)
                 HStack(spacing: 8) {
                     Circle().fill(ctrl.isAutoPaused ? AppColor.ink2 : AppColor.recording).frame(width: 9, height: 9)

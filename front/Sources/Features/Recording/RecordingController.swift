@@ -15,6 +15,7 @@ final class RecordingController: ObservableObject {
     @Published var pointCount: Int = 0
     @Published var isAutoPaused = false          // 静止自动暂停
     @Published var liveCoordinates: [CLLocationCoordinate2D] = []  // 记录中实时画线
+    @Published var waypoints: [Waypoint] = []    // 本次记录已打标注点（记录页地图实时显示）
     @Published var waypointCount = 0             // 本次记录已打标注点数
 
     private let location = LocationManager.shared
@@ -76,7 +77,8 @@ final class RecordingController: ObservableObject {
             lastEle = last.elevation
         }
         lastLocation = nil                        // 不跨崩溃间隔计距离
-        waypointCount = (try? repo.waypoints(trackId: s.id))?.count ?? 0
+        waypoints = (try? repo.waypoints(trackId: s.id)) ?? []   // 续记恢复已打点
+        waypointCount = waypoints.count
         beginSensors()
     }
 
@@ -91,6 +93,7 @@ final class RecordingController: ObservableObject {
                          elevation: currentElevation, note: nil,
                          createdAt: Date(), updatedAt: Date(), isDeleted: false, isSynced: false)
         try? repo.addWaypoint(w)
+        waypoints.append(w)              // 记录页地图实时显示
         waypointCount += 1
         return true
     }
@@ -248,7 +251,8 @@ final class RecordingController: ObservableObject {
         state = .idle; distance = 0; movingTime = 0; ascent = 0; descent = 0
         pointCount = 0; currentElevation = nil; isAutoPaused = false
         liveCoordinates = []; buffer = []; lastLocation = nil; lastEle = nil
-        trackId = nil; session = nil; currentSegment = 0; currentSeq = 0; waypointCount = 0
+        trackId = nil; session = nil; currentSegment = 0; currentSeq = 0
+        waypointCount = 0; waypoints = []
     }
 
     private func defaultName() -> String {
