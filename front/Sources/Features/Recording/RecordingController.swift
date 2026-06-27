@@ -13,6 +13,7 @@ final class RecordingController: ObservableObject {
     @Published var ascent: Double = 0            // 累计爬升，单位 m（去噪后）
     @Published var descent: Double = 0           // 累计下降，单位 m（去噪后）
     @Published var currentElevation: Double?     // 当前海拔，优先气压计相对值，否则 GPS 高度
+    @Published var currentSpeed: Double?         // 瞬时速度（m/s，无效定位为 nil）
     @Published var pointCount: Int = 0           // 已采集轨迹点总数
     @Published var isAutoPaused = false          // 静止自动暂停
     @Published var liveCoordinates: [CLLocationCoordinate2D] = []  // 记录中实时画线
@@ -192,6 +193,8 @@ final class RecordingController: ObservableObject {
         guard state == .recording else { return }  // 暂停/自动暂停期间丢弃定位
         guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= minAccuracy else { return }  // 任务 3.6：精度差/无效丢弃
 
+        currentSpeed = loc.speed >= 0 ? loc.speed : nil   // 瞬时速度（在 minMove 过滤前更新，停步也反映）
+
         var newSegment = false
         if let last = lastLocation {
             // 两点时间间隔过大判为断段（如锁屏后台被系统挂起），断段两端不连线、不计距
@@ -265,7 +268,7 @@ final class RecordingController: ObservableObject {
     /// 清空全部记录现场，回到 idle（finish/cancel 收尾后调用），供下次记录复用本实例。
     private func reset() {
         state = .idle; distance = 0; movingTime = 0; ascent = 0; descent = 0
-        pointCount = 0; currentElevation = nil; isAutoPaused = false
+        pointCount = 0; currentElevation = nil; currentSpeed = nil; isAutoPaused = false
         liveCoordinates = []; buffer = []; lastLocation = nil; lastEle = nil
         trackId = nil; session = nil; currentSegment = 0; currentSeq = 0
         waypointCount = 0; waypoints = []

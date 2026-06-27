@@ -42,11 +42,17 @@ struct RecordingView: View {
                 }
                 Text("累计距离").font(.caption).foregroundColor(AppColor.ink2)
 
+                // 第一行：爬升 / 下降 / 用时
                 HStack {
                     metric("\(Int(ctrl.ascent))", "累计爬升 m", AppColor.primary)
                     Spacer(); metric("\(Int(ctrl.descent))", "累计下降 m", AppColor.ink2)
                     Spacer(); metric(timeString(ctrl.movingTime), "用时", AppColor.ink)
-                    Spacer(); metric("\(ctrl.pointCount)", "轨迹点", AppColor.ink)
+                }
+                // 第二行：均配速 / 瞬时速度 / 当前海拔
+                HStack {
+                    metric(avgPaceText, "均配速 /km", AppColor.primary)
+                    Spacer(); metric(speedText, "速度 km/h", AppColor.ink)
+                    Spacer(); metric(eleText, "海拔 m", AppColor.ink)
                 }
 
                 Button { showMarkDialog = true } label: {
@@ -123,6 +129,22 @@ struct RecordingView: View {
     private func timeString(_ s: TimeInterval) -> String {
         let t = Int(s); return String(format: "%02d:%02d:%02d", t / 3600, (t % 3600) / 60, t % 60)
     }
+
+    /// 均配速（分:秒 / 公里）：用运动用时 ÷ 距离；距离过短或无用时显示 --。
+    private var avgPaceText: String {
+        guard ctrl.distance > 10, ctrl.movingTime > 0 else { return "--" }
+        let secPerKm = ctrl.movingTime / (ctrl.distance / 1000)
+        return String(format: "%d:%02d", Int(secPerKm) / 60, Int(secPerKm) % 60)
+    }
+
+    /// 瞬时速度（km/h）：由定位 speed(m/s) 换算；无效显示 --。
+    private var speedText: String {
+        guard let s = ctrl.currentSpeed, s >= 0 else { return "--" }
+        return String(format: "%.1f", s * 3.6)
+    }
+
+    /// 当前海拔（m）：气压计相对值优先，否则 GPS；无则 --。
+    private var eleText: String { ctrl.currentElevation.map { "\(Int($0))" } ?? "--" }
 
     /// 单项统计小部件：数值 v + 标签 l + 配色 c。
     private func metric(_ v: String, _ l: String, _ c: Color) -> some View {
