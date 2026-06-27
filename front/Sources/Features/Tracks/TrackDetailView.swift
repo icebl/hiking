@@ -22,7 +22,8 @@ struct TrackDetailView: View {
     @State private var showLayerSheet = false
     @State private var profile: [ElevSample] = []
     @State private var selectedProfileIndex: Int?
-    @State private var showProfile = true
+    @State private var showProfile = false           // 默认不展开海拔剖面
+    @State private var showWaypoints = true          // 轨迹上标记点显隐
     @State private var showRename = false
     @State private var renameText = ""
     @State private var showDeleteConfirm = false
@@ -49,11 +50,12 @@ struct TrackDetailView: View {
                                      highlightCoordinate: selectedProfileIndex.flatMap {
                                          profile.indices.contains($0) ? profile[$0].coord : nil },
                                      showRoadNetwork: showRoadNetwork,
-                                     waypoints: waypoints,
+                                     waypoints: showWaypoints ? waypoints : [],
                                      centerOn: focusWaypoint.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
                         MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
                                            hasProfile: !profile.isEmpty, showProfile: showProfile,
                                            isVectorBase: isVectorBase, showRoadNetwork: $showRoadNetwork,
+                                           hasWaypoints: !waypoints.isEmpty, showWaypoints: $showWaypoints,
                                            onPlaceholder: showToast, onLayers: { showLayerSheet = true },
                                            onContours: { toggleContours() },
                                            onProfile: {
@@ -82,8 +84,8 @@ struct TrackDetailView: View {
                 waypointList
             }
 
-            // 显示海拔剖面时隐藏底部按钮（给剖面让出空间）；隐藏剖面/切到详情页时显示。
-            if !(tab == 0 && showProfile && !profile.isEmpty) {
+            // 标记点页隐藏底部按钮；地图页展开剖面时也隐藏（给剖面让空间）。
+            if tab != 2 && !(tab == 0 && showProfile && !profile.isEmpty) {
                 HStack(spacing: 12) {
                     Button { exportGPX() } label: {
                         Text("导出").frame(maxWidth: .infinity).frame(height: 52)

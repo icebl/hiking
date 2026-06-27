@@ -12,6 +12,9 @@ struct MapControlsOverlay: View {
     /// 路网开关（仅离线矢量底图有效）；showRoadNetwork 绑定，isVectorBase 控制是否显示该控件。
     var isVectorBase: Bool = false
     @Binding var showRoadNetwork: Bool
+    /// 标记点显隐开关；hasWaypoints 控制是否显示该控件。
+    var hasWaypoints: Bool = false
+    @Binding var showWaypoints: Bool
     var onPlaceholder: (String) -> Void = { _ in }
     var onLayers: () -> Void = {}
     var onContours: () -> Void = {}
@@ -45,6 +48,9 @@ struct MapControlsOverlay: View {
                          active: controller.locateState == .following) { controller.cycleLocate() }
                     Spacer()
                     ctrl("scope", "回到原点") { controller.fitTrack() }
+                    if hasWaypoints {
+                        ctrl("mappin.and.ellipse", "标记点", active: showWaypoints) { showWaypoints.toggle() }
+                    }
                     ctrl("mountain.2", "等高线", active: showContours) { onContours() }
                     if hasProfile {
                         ctrl("chart.xyaxis.line", "剖面", active: showProfile) { onProfile() }

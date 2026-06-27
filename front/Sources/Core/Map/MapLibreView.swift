@@ -595,14 +595,15 @@ final class WaypointAnnotation: MLNPointAnnotation {
 final class WaypointMarkerView: MLNAnnotationView {
     init(kind: WaypointKind) {
         super.init(reuseIdentifier: "wp-\(kind.rawValue)")
-        frame = CGRect(x: 0, y: 0, width: 30, height: 30)
+        // 参照公里标圆圈大小（约 22pt）：略小、细白边
+        frame = CGRect(x: 0, y: 0, width: 24, height: 24)
         layer.backgroundColor = kind.uiColor.cgColor
-        layer.cornerRadius = 15
+        layer.cornerRadius = 12
         layer.borderColor = UIColor.white.cgColor
-        layer.borderWidth = 2
+        layer.borderWidth = 1.5
         layer.shadowColor = UIColor.black.cgColor
         layer.shadowOpacity = 0.3; layer.shadowRadius = 2; layer.shadowOffset = .zero
-        let iv = UIImageView(frame: bounds.insetBy(dx: 7, dy: 7))
+        let iv = UIImageView(frame: bounds.insetBy(dx: 5.5, dy: 5.5))
         iv.image = UIImage(systemName: kind.icon)?.withRenderingMode(.alwaysTemplate)
         iv.tintColor = .white
         iv.contentMode = .scaleAspectFit
