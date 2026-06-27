@@ -33,4 +33,10 @@ enum AppSettings {
     static var coordFormat: String {              // 坐标格式
         d.string(forKey: "coordFormat") ?? "度 dd.ddddd°"
     }
+    static var diagnostics: Bool {                // 诊断日志（电量/后台采样），默认关
+        d.object(forKey: "diagnostics") != nil ? d.bool(forKey: "diagnostics") : false
+    }
+    static var powerSaveGPS: Bool {               // 省电定位（降精度+加大位移过滤），默认关
+        d.object(forKey: "powerSaveGPS") != nil ? d.bool(forKey: "powerSaveGPS") : false
+    }
 }

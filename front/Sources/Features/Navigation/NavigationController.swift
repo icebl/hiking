@@ -37,6 +37,7 @@ final class NavigationController: ObservableObject {
     private var voiceEnabled = false                // 本次导航是否启用语音（start 时读设置固定）
     private var voiceIntervalSec: TimeInterval = 300 // 剩余里程播报间隔（秒，读设置）
     private var lastVoiceAt = Date()                // 上次定时播报时刻，控制间隔
+    private var lastDiagAt = Date()                 // 上次诊断采样时刻（电量/后台，每 60s）
 
     /// 启动导航：构建计划线、读阈值设置、订阅定位流。
     /// 参数 trackId 计划轨迹；reverse 是否反向；alsoRecord 是否同时记录实走。前置 !running，防重入。
@@ -63,6 +64,8 @@ final class NavigationController: ObservableObject {
         remainingDistance = l.totalDistance
         remainingAscent = l.totalAscent
 
+        DiagnosticsLog.event("nav.start reverse=\(reverse) alsoRecord=\(alsoRecord) powerSaveGPS=\(AppSettings.powerSaveGPS)")
+        lastDiagAt = Date()
         requestNotificationAuth()
         location.requestWhenInUse()
         location.start(background: true)
@@ -72,6 +75,7 @@ final class NavigationController: ObservableObject {
     /// 停止导航：退订定位。仅在未同时记录时直接停定位，否则交由 recorder 收尾以免提前断流。
     func stop() {
         running = false
+        DiagnosticsLog.sample("nav.stop", extra: "remain=\(Int(remainingDistance))m")
         cancellables.removeAll()
         speaker.stop()                         // 停止语音并释放音频会话
         if !isRecording { location.stop() }   // 同时记录时由 recorder 收尾停定位
@@ -111,8 +115,14 @@ final class NavigationController: ObservableObject {
 
         updateWaypointProximity(loc)
 
-        // 定时播报剩余里程：到达后不再播，偏航时也跳过（此刻该听偏航提醒）
+        // 每 60s 诊断采样（电量/前后台/精度），供真机续航实测
         let nowTime = Date()
+        if nowTime.timeIntervalSince(lastDiagAt) >= 60 {
+            lastDiagAt = nowTime
+            DiagnosticsLog.sample("nav", extra: "remain=\(Int(remainingDistance))m off=\(isOffRoute) acc=\(Int(loc.horizontalAccuracy))m")
+        }
+
+        // 定时播报剩余里程：到达后不再播，偏航时也跳过（此刻该听偏航提醒）
         if voiceEnabled, !arrived, !isOffRoute, nowTime.timeIntervalSince(lastVoiceAt) >= voiceIntervalSec {
             lastVoiceAt = nowTime
             announce(String(format: "剩余 %.1f 公里，爬升 %d 米", remainingDistance / 1000, Int(remainingAscent)))

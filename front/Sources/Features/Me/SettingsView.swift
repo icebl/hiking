@@ -14,6 +14,8 @@ struct SettingsView: View {
     @AppStorage("voiceInterval") private var voiceInterval = 5
     @AppStorage("recordWhileNav") private var recordWhileNav = true
     @AppStorage("coordFormat") private var coordFormat = "度 dd.ddddd°"
+    @AppStorage("powerSaveGPS") private var powerSaveGPS = false
+    @AppStorage("diagnostics") private var diagnostics = false
 
     // 草稿（界面只改这些，仅「确认」后写回上面持久化项）；初值会在 onAppear 由 loadDraft 覆盖
     @State private var dSample = 5         // 采样间隔(秒) 1…30
@@ -26,6 +28,8 @@ struct SettingsView: View {
     @State private var dVoiceInt = 5       // 语音播报间隔(分) 5/10
     @State private var dRecNav = true      // 导航时同时记录
     @State private var dCoord = "度 dd.ddddd°"   // 坐标格式
+    @State private var dPowerSave = false  // 省电定位（降精度+加大位移过滤）
+    @State private var dDiag = false       // 诊断日志（电量/后台采样）
     @State private var justSaved = false   // 刚点过确认（用于按钮显示「已保存 ✓」）
 
     var body: some View {
@@ -35,6 +39,7 @@ struct SettingsView: View {
                 Stepper("最小位移 \(dMinMove) 米", value: $dMinMove, in: 1...50)
                 Toggle("静止自动暂停", isOn: $dAutoPause)
                 Toggle("气压计辅助海拔", isOn: $dBaro)
+                Toggle("省电定位（降精度，更省电）", isOn: $dPowerSave)
             }
             Section("导航") {
                 Stepper("偏航阈值 \(dOffRoute) 米", value: $dOffRoute, in: 10...100, step: 5)
@@ -50,6 +55,7 @@ struct SettingsView: View {
                     Text("UTM").tag("UTM")
                 }
                 LabeledContent("账号 · 三期", value: "未登录")
+                Toggle("诊断日志（电量/后台采样）", isOn: $dDiag)
             }
             Section {
                 Button { apply() } label: {
@@ -73,6 +79,7 @@ struct SettingsView: View {
         || dBaro != useBarometer || dOffRoute != offRouteThreshold || dWpApproach != waypointApproach
         || dVoice != voiceAlert
         || dVoiceInt != voiceInterval || dRecNav != recordWhileNav || dCoord != coordFormat
+        || dPowerSave != powerSaveGPS || dDiag != diagnostics
     }
 
     /// 进入页面时把持久化值灌入草稿，保证界面初始展示与已保存设置一致。
@@ -81,6 +88,7 @@ struct SettingsView: View {
         dOffRoute = offRouteThreshold; dWpApproach = waypointApproach
         dVoice = voiceAlert; dVoiceInt = voiceInterval
         dRecNav = recordWhileNav; dCoord = coordFormat
+        dPowerSave = powerSaveGPS; dDiag = diagnostics
     }
 
     /// 点「确认修改」时把草稿写回 @AppStorage 真正生效，并标记 justSaved 用于按钮反馈。
@@ -89,6 +97,7 @@ struct SettingsView: View {
         offRouteThreshold = dOffRoute; waypointApproach = dWpApproach
         voiceAlert = dVoice; voiceInterval = dVoiceInt
         recordWhileNav = dRecNav; coordFormat = dCoord
+        powerSaveGPS = dPowerSave; diagnostics = dDiag
         justSaved = true
     }
 }

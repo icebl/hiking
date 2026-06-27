@@ -101,12 +101,13 @@ final class RecordingController: ObservableObject {
     }
 
     /// 手动暂停：停止累计用时与采点，写盘会话状态以便崩溃恢复。
-    func pause() { state = .paused; persistSessionState() }
+    func pause() { state = .paused; DiagnosticsLog.event("rec.pause"); persistSessionState() }
     /// 手动继续：复位 lastMoveAt 与自动暂停标志，避免恢复瞬间被误判为静止。
-    func resume() { state = .recording; lastMoveAt = Date(); isAutoPaused = false; persistSessionState() }
+    func resume() { state = .recording; lastMoveAt = Date(); isAutoPaused = false; DiagnosticsLog.event("rec.resume"); persistSessionState() }
 
     /// 结束 → 写入终值、删会话（任务 3.10）。
     func finish() throws -> Track {
+        DiagnosticsLog.sample("rec.finish", extra: "pts=\(pointCount) dist=\(Int(distance))m movingTime=\(Int(movingTime))s")
         timer?.invalidate(); timer = nil
         location.stop(); altimeter.stop(); cancellables.removeAll()
         guard let id = trackId else { throw NSError(domain: "Recording", code: -1) }
@@ -158,6 +159,7 @@ final class RecordingController: ObservableObject {
 
     /// 启动传感器：读取设置 → 视情况启气压计 → 订阅定位流 → 起计时器。start/resume 共用入口。
     private func beginSensors() {
+        DiagnosticsLog.event("rec.begin powerSaveGPS=\(AppSettings.powerSaveGPS) barometer=\(AppSettings.useBarometer)")
         state = .recording
         lastMoveAt = Date()
         minMove = AppSettings.minMove                  // 读设置
@@ -173,12 +175,17 @@ final class RecordingController: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.tick() }
     }
 
-    /// 1s 计时：运动用时累加 + 静止自动暂停判定（任务 3.5 / 3.7）。
+    /// 1s 计时：运动用时累加 + 静止自动暂停判定（任务 3.5 / 3.7）+ 每 60s 诊断采样（电量/后台）。
     private func tick() {
+        tickCount += 1
+        if tickCount % 60 == 0 {   // 每分钟采一次，记录电量随时间/前后台的变化
+            DiagnosticsLog.sample("rec", extra: "pts=\(pointCount) dist=\(Int(distance))m state=\(state) autopause=\(isAutoPaused)")
+        }
         guard state == .recording else { return }
         if autoPauseEnabled, Date().timeIntervalSince(lastMoveAt) > autoPauseSeconds { isAutoPaused = true }
         if !isAutoPaused { movingTime += 1 }
     }
+    private var tickCount = 0   // tick 次数，用于按 60s 周期采样诊断
 
     /// 处理一帧定位：精度过滤 → 断段/计距/海拔去噪 → 入缓冲 → 达阈落盘。记录主流程。
     private func ingest(_ loc: CLLocation) {

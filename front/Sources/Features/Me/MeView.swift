@@ -26,9 +26,7 @@ struct MeView: View {
                     NavigationLink { OfflineMapsView() } label: { Label("离线地图", systemImage: "square.3.stack.3d") }
                     NavigationLink { ImportPreviewView() } label: { Label("导入轨迹", systemImage: "square.and.arrow.down") }
                     NavigationLink { SettingsView() } label: { Label("设置", systemImage: "gearshape") }
-                    NavigationLink {
-                        Text("路迹 v0.1")
-                    } label: {
+                    NavigationLink { AboutView() } label: {
                         HStack {
                             Label("关于", systemImage: "info.circle")
                             Spacer()

@@ -36,6 +36,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     /// 开始连续定位与朝向更新。
     /// - Parameter background: 是否需要后台持续记录（轨迹记录场景传 true）。
     func start(background: Bool) {
+        applyPowerMode()   // 按「省电定位」设置调精度/位移过滤（每次 start 读最新设置）
         if background {
             // 仅在已授予 Always 时允许后台更新，否则会崩溃。
             manager.allowsBackgroundLocationUpdates = (authorization == .authorizedAlways)
@@ -43,6 +44,18 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         }
         manager.startUpdatingLocation()
         manager.startUpdatingHeading()
+    }
+
+    /// 省电定位：开启则降精度(~10m)+加大最小位移(10m)，显著省电、轨迹略糙；关闭走最高精度。
+    /// 供真机续航实测 A/B 对比；每次 start 时按最新设置应用。
+    private func applyPowerMode() {
+        if AppSettings.powerSaveGPS {
+            manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+            manager.distanceFilter = 10
+        } else {
+            manager.desiredAccuracy = kCLLocationAccuracyBest
+            manager.distanceFilter = minDistanceFilter
+        }
     }
 
     /// 停止定位与朝向，并关闭后台更新开关
