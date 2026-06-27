@@ -20,7 +20,12 @@ struct TracksView: View {
     @State private var showCreateFolder = false  // 是否弹出新建文件夹 alert
     @State private var newFolderName = ""     // 新建文件夹名称输入框
     @State private var moveTarget: Track?     // 正在移动到文件夹的轨迹，非 nil 即弹选择面板
-    @State private var editMode: EditMode = .inactive  // 列表编辑态：开启后组内轨迹可拖拽排序
+    @State private var editMode: EditMode = .inactive  // 列表编辑态：开启后组内轨迹可拖拽排序 + 多选批量操作
+    @State private var selectedIDs: Set<UUID> = []     // 编辑态多选的轨迹 id
+    @State private var showBatchMove = false           // 批量移动到文件夹的选择面板
+    @State private var showBatchDelete = false         // 批量删除确认
+    @State private var shareURLs: [URL] = []           // 批量导出生成的文件，交系统分享
+    @State private var showShare = false               // 是否弹出系统分享面板
 
     private let repo = TrackRepository()      // 数据访问层：轨迹/文件夹的增删改查
 
@@ -28,7 +33,8 @@ struct TracksView: View {
         VStack(spacing: 0) {
             header
             if segment == 0 { localList } else { cloudPlaceholder }
-            bottomBar
+            // 编辑态显示批量操作条，否则显示常规导入/新建按钮
+            if editMode.isEditing && segment == 0 { batchBar } else { bottomBar }
         }
         .navigationBarHidden(true)
         .navigationDestination(for: UUID.self) { TrackDetailView(trackId: $0) }
@@ -48,6 +54,19 @@ struct TracksView: View {
             Button("未分组") { move(t, to: nil) }
             Button("取消", role: .cancel) {}
         }
+        // 批量移动：把选中的多条移到某文件夹
+        .confirmationDialog("移动 \(selectedIDs.count) 条到文件夹", isPresented: $showBatchMove, titleVisibility: .visible) {
+            ForEach(folders) { f in Button(f.name) { batchMove(to: f.id) } }
+            Button("未分组") { batchMove(to: nil) }
+            Button("取消", role: .cancel) {}
+        }
+        // 批量删除确认
+        .confirmationDialog("删除选中的 \(selectedIDs.count) 条轨迹？", isPresented: $showBatchDelete, titleVisibility: .visible) {
+            Button("删除", role: .destructive) { batchDelete() }
+            Button("取消", role: .cancel) {}
+        } message: { Text("删除后可在云端同步前恢复（三期）；本机列表将移除。") }
+        // 批量导出后的系统分享面板
+        .sheet(isPresented: $showShare) { ShareSheet(items: shareURLs) }
     }
 
     // MARK: - 顶部
@@ -69,7 +88,10 @@ struct TracksView: View {
                     HStack {
                         Spacer()
                         Button(editMode.isEditing ? "完成" : "管理") {
-                            withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                            withAnimation {
+                                if editMode.isEditing { editMode = .inactive; selectedIDs = [] }
+                                else { editMode = .active }
+                            }
                         }
                         .font(.system(size: 15, weight: .semibold)).foregroundColor(AppColor.primary)
                     }
@@ -98,14 +120,14 @@ struct TracksView: View {
                 Spacer()
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            List {
+            List(selection: $selectedIDs) {       // 编辑态下提供多选（选中态=批量操作目标）
                 ForEach(folders) { f in
                     groupSection(title: f.name, key: f.id.uuidString, items: tracksIn(f.id))
                 }
                 groupSection(title: "未分组", key: "ungrouped", items: ungrouped)
             }
             .listStyle(.plain)
-            .environment(\.editMode, $editMode)   // 编辑态下组内 ForEach 显示拖拽手柄
+            .environment(\.editMode, $editMode)   // 编辑态下组内 ForEach 显示拖拽手柄 + 选择圈
         }
     }
 
@@ -197,6 +219,37 @@ struct TracksView: View {
         }.padding(.horizontal, 16).padding(.vertical, 10)
     }
 
+    /// 批量操作条（编辑态显示）：全选/全不选 + 删除 / 移动 / 导出，均作用于 selectedIDs。
+    /// 无选中时三项操作禁用。
+    private var batchBar: some View {
+        let none = selectedIDs.isEmpty
+        return HStack(spacing: 0) {
+            // 全选：未全选则选中全部可见轨迹，已全选则清空
+            Button {
+                let ids = Set(shown.map { $0.id })
+                selectedIDs = (selectedIDs.count == ids.count && !ids.isEmpty) ? [] : ids
+            } label: { batchItem("checklist", selectedIDs.count == shown.count && !shown.isEmpty ? "全不选" : "全选") }
+
+            Button { showBatchExport() } label: { batchItem("square.and.arrow.up", "导出") }
+                .disabled(none)
+            Button { showBatchMove = true } label: { batchItem("folder", "移动") }
+                .disabled(none)
+            Button { showBatchDelete = true } label: { batchItem("trash", "删除", tint: AppColor.recording) }
+                .disabled(none)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 8)
+        .overlay(Divider(), alignment: .top)
+    }
+
+    /// 批量条单项：图标 + 文字，禁用时变灰由 .disabled + opacity 体现。
+    private func batchItem(_ icon: String, _ label: String, tint: Color = AppColor.primary) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 18))
+            Text(label).font(.system(size: 11))
+        }
+        .foregroundColor(tint).frame(maxWidth: .infinity).frame(height: 40)
+    }
+
     // MARK: - 数据/动作
     /// 经搜索过滤后的轨迹集合（关键词为空则返回全部）；下面分组都基于它再切分。
     private var shown: [Track] {
@@ -227,6 +280,33 @@ struct TracksView: View {
 
     /// 软删除轨迹并刷新。
     private func delete(_ t: Track) { try? repo.softDelete(id: t.id); reload() }
+
+    // MARK: - 批量操作（作用于 selectedIDs）
+    /// 批量软删除选中轨迹，清空选择并刷新。
+    private func batchDelete() {
+        for id in selectedIDs { try? repo.softDelete(id: id) }
+        selectedIDs = []; reload()
+    }
+    /// 批量移动选中轨迹到文件夹（nil=未分组），展开目标后刷新。
+    private func batchMove(to folderId: UUID?) {
+        for id in selectedIDs { try? repo.moveTrack(id: id, to: folderId) }
+        if let fid = folderId { expanded.insert(fid.uuidString) }
+        selectedIDs = []; reload()
+    }
+    /// 批量导出选中轨迹为 GPX，收集文件 URL 后弹系统分享（多文件一次分享）。
+    private func showBatchExport() {
+        let svc = GPXService()
+        var urls: [URL] = []
+        for id in selectedIDs {
+            guard let t = try? repo.track(id: id) else { continue }
+            let pts = (try? repo.points(trackId: id)) ?? []
+            let wps = (try? repo.waypoints(trackId: id)) ?? []
+            if let url = try? svc.export(track: t, points: pts, waypoints: wps) { urls.append(url) }
+        }
+        guard !urls.isEmpty else { return }
+        shareURLs = urls
+        showShare = true
+    }
     /// 把轨迹移动到目标文件夹（nil 表示移出到未分组）。
     private func move(_ t: Track, to folderId: UUID?) {
         try? repo.moveTrack(id: t.id, to: folderId)
