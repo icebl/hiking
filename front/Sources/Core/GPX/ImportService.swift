@@ -32,6 +32,15 @@ enum ImportService {
         return tracks
     }
 
+    /// 缺海拔的轨迹用在线 DEM 补海拔；已有海拔则原样返回。返回补好的 ParsedTrack（统计在 save 时按补后点重算）。
+    static func fillingElevationIfNeeded(_ parsed: GPXService.ParsedTrack) async -> GPXService.ParsedTrack {
+        guard !parsed.hasElevation else { return parsed }
+        var t = parsed
+        t.points = await ElevationService.shared.fillElevations(parsed.points)
+        t.hasElevation = t.points.contains { $0.elevation != nil }
+        return t
+    }
+
     /// 把一条解析结果结算为 Track（计算距离/爬升/海拔区间）并写入数据库。
     @discardableResult
     static func save(_ parsed: GPXService.ParsedTrack) throws -> Track {

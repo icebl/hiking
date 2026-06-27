@@ -11,6 +11,7 @@ struct MapScreen: View {
     @ObservedObject private var loc = LocationManager.shared  // 实时定位（驱动顶部信息条经纬度/海拔）
     @State private var showRecording = false               // 是否弹出全屏「记录」页
     @State private var tapped: String? = nil   // 点击地图取经纬度读数（任务 2.8）；nil 表示未点/已关闭
+    @State private var tappedEle: String = "海拔 查询中…"   // 点击点的海拔（DEM 在线查，异步回填）
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1），1=最大
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
@@ -36,9 +37,9 @@ struct MapScreen: View {
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
                          showRoadNetwork: showRoadNetwork, overlays: overlayItems.map(\.coords),
                          onTap: { c in
-                             // 测量进行中：点击落点累积进折线/多边形；否则只读取经纬度显示
+                             // 测量进行中：点击落点累积进折线/多边形；否则取经纬度并异步查该点海拔
                              if measure != .none { measurePoints.append(c) }
-                             else { tapped = CoordFormatter.string(c, format: AppSettings.coordFormat) }
+                             else { tapped = CoordFormatter.string(c, format: AppSettings.coordFormat); fetchTappedElevation(c) }
                          })
                 .ignoresSafeArea()
 
@@ -96,7 +97,7 @@ struct MapScreen: View {
                         Text("地图上的点 ")
                             .foregroundColor(.white)
                         + Text(tapped).foregroundColor(Color(hex: 0x7EE0A6)).bold()
-                        + Text(" · 海拔 未知").foregroundColor(.white)
+                        + Text(" · \(tappedEle)").foregroundColor(.white)
                         Spacer()
                         Button { self.tapped = nil } label: {
                             Image(systemName: "xmark").foregroundColor(.white.opacity(0.8))
@@ -228,6 +229,18 @@ struct MapScreen: View {
     private var isVectorBase: Bool {
         if case .offlineVector = baseMode { return true }
         return false
+    }
+
+    /// 异步查询点击点的海拔（在线 DEM）：先显示"查询中"，得到结果回填米数或"未知"。
+    private func fetchTappedElevation(_ c: CLLocationCoordinate2D) {
+        tappedEle = "海拔 查询中…"
+        Task { @MainActor in
+            if let e = await ElevationService.shared.elevation(lat: c.latitude, lon: c.longitude) {
+                tappedEle = String(format: "海拔 %.0f m", e)
+            } else {
+                tappedEle = "海拔 未知"
+            }
+        }
     }
 
     /// 切换等高线：缺等高线包时不切换，借用经纬度读数条提示去导入；有包才真正开关。

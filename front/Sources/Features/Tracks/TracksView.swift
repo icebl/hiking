@@ -334,6 +334,7 @@ struct ImportPreviewView: View {
     @State private var errorMsg: String?       // 解析/入库错误文案，非 nil 时显示错误态
     @State private var showPicker = false      // 是否弹出系统文件选择器
     @State private var imported = false        // 是否已成功入库，切到成功态
+    @State private var importing = false       // 入库中（含 DEM 补海拔），显示进行态
 
     init(fileURL: URL? = nil) { self.fileURL = fileURL }
 
@@ -343,7 +344,12 @@ struct ImportPreviewView: View {
 
     var body: some View {
         Group {
-            if imported {
+            if importing {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("导入中…（缺海拔的轨迹会联网补全）").font(.subheadline).foregroundColor(AppColor.ink2)
+                }.padding()
+            } else if imported {
                 statusView(icon: "checkmark.circle.fill", color: AppColor.primary, text: "已导入到“轨迹”")
             } else if let errorMsg {
                 statusView(icon: "exclamationmark.triangle.fill", color: AppColor.warning, text: errorMsg)
@@ -418,13 +424,20 @@ struct ImportPreviewView: View {
         }
     }
 
-    /// 确认导入：逐条入库，全部成功切到成功态，任一失败显示错误。
+    /// 确认导入：缺海拔的轨迹先联网用 DEM 补海拔，再逐条入库；全部成功切成功态，任一失败显示错误。
     private func confirmImport() {
-        do {
-            for t in parsed { try ImportService.save(t) }
-            imported = true
-        } catch {
-            errorMsg = "入库失败：\(error.localizedDescription)"
+        importing = true
+        Task { @MainActor in
+            do {
+                for t in parsed {
+                    let filled = await ImportService.fillingElevationIfNeeded(t)
+                    try ImportService.save(filled)
+                }
+                importing = false; imported = true
+            } catch {
+                importing = false
+                errorMsg = "入库失败：\(error.localizedDescription)"
+            }
         }
     }
 }
