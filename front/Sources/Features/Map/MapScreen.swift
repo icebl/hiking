@@ -37,9 +37,9 @@ struct MapScreen: View {
             // 底图视图：把上面各开关/状态下传给原生地图渲染
             MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
+                         highlightCoordinate: tappedCoord,   // 点击点的高亮标记（橙点，区别于航点）
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
                          showRoadNetwork: showRoadNetwork, overlays: overlayItems.map(\.coords),
-                         highlightCoordinate: tappedCoord,   // 点击点的高亮标记（橙点，区别于航点）
                          onTap: { c in
                              // 测量进行中：点击落点累积进折线/多边形；否则取经纬度、查海拔并高亮该点
                              if measure != .none { measurePoints.append(c) }
