@@ -37,47 +37,42 @@ struct TrackDetailView: View {
     @State private var kindPickWaypoint: Waypoint?      // 正在更改类型的航点
     @State private var showKindDialog = false           // 是否弹出类型选择面板
 
+    // body 拆分：导航栏修饰留在 body，内容与各类弹窗下放到 content/子视图，
+    // 避免单个表达式过大触发「类型检查超时」。
     var body: some View {
+        content
+            .navigationTitle(track?.name ?? "轨迹详情")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .tabBar)   // 二级页隐藏底部 Tab（页面结构规则）
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { renameText = track?.name ?? ""; showRename = true } label: {
+                            Label("重命名", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) { showDeleteConfirm = true } label: {
+                            Label("删除轨迹", systemImage: "trash")
+                        }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                }
+            }
+    }
+
+    /// 页面主体：分段内容 + 底部按钮，挂数据加载与「重命名/删除/导出」相关弹窗。
+    private var content: some View {
         VStack(spacing: 0) {
             Picker("", selection: $tab) { Text("地图").tag(0); Text("详情").tag(1); Text("标注点").tag(2) }
                 .pickerStyle(.segmented).padding()
-
-            if tab == 0 {
-                mapTab
-            } else if tab == 1 {
-                statsList
-            } else {
-                waypointList
-            }
-
-            // 标记点页隐藏底部按钮；地图页展开剖面时也隐藏（给剖面让空间）。
-            if tab != 2 && !(tab == 0 && showProfile && !profile.isEmpty) {
-                HStack(spacing: 12) {
-                    Button { showExportDialog = true } label: {
-                        Text("导出").frame(maxWidth: .infinity).frame(height: 52)
-                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColor.divider))
-                    }
-                    NavigationLink { NavigationRunView(trackId: trackId) } label: {
-                        Text("使用轨迹导航").fontWeight(.semibold).foregroundColor(.white)
-                            .frame(maxWidth: .infinity).frame(height: 52).background(AppColor.primary).cornerRadius(14)
-                    }
-                }.padding()
-            }
+            if tab == 0 { mapTab } else if tab == 1 { statsList } else { waypointList }
+            bottomActions
         }
-        .navigationTitle(track?.name ?? "轨迹详情")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)   // 二级页隐藏底部 Tab（页面结构规则）
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button { renameText = track?.name ?? ""; showRename = true } label: {
-                        Label("重命名", systemImage: "pencil")
-                    }
-                    Button(role: .destructive) { showDeleteConfirm = true } label: {
-                        Label("删除轨迹", systemImage: "trash")
-                    }
-                } label: { Image(systemName: "ellipsis.circle") }
-            }
+        .task {
+            // 进入页面时一次性从仓库加载轨迹/点/航点，并派生出绘线坐标与海拔剖面
+            track = try? TrackRepository().track(id: trackId)
+            points = (try? TrackRepository().points(trackId: trackId)) ?? []
+            waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
+            coords = points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+            profile = Self.buildProfile(points)
         }
         .alert("重命名轨迹", isPresented: $showRename) {
             TextField("名称", text: $renameText)
@@ -88,14 +83,6 @@ struct TrackDetailView: View {
             Button("删除", role: .destructive) { deleteTrack() }
             Button("取消", role: .cancel) {}
         } message: { Text("删除后可在云端同步前恢复（三期）；本机列表将移除。") }
-        .task {
-            // 进入页面时一次性从仓库加载轨迹/点/航点，并派生出绘线坐标与海拔剖面
-            track = try? TrackRepository().track(id: trackId)
-            points = (try? TrackRepository().points(trackId: trackId)) ?? []
-            waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
-            coords = points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
-            profile = Self.buildProfile(points)
-        }
         .sheet(isPresented: $showShare) {
             if let exportURL { ShareSheet(items: [exportURL]) }
         }
@@ -107,28 +94,21 @@ struct TrackDetailView: View {
         .alert("导出失败", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button("好", role: .cancel) {}
         } message: { Text(exportError ?? "") }
-        .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
-            Button("在线影像（ESRI，含已缓存离线区域）") { baseMode = .onlineRaster }
-            ForEach(OfflineMaps.list().filter { OfflineMaps.isVectorBase($0) }, id: \.self) { url in
-                Button("离线矢量 · \(url.deletingPathExtension().lastPathComponent)") {
-                    baseMode = .offlineVector(path: url.path)
+    }
+
+    /// 底部按钮（导出 / 使用轨迹导航）。标记点页隐藏；地图页展开剖面时也隐藏（给剖面让空间）。
+    @ViewBuilder private var bottomActions: some View {
+        if tab != 2 && !(tab == 0 && showProfile && !profile.isEmpty) {
+            HStack(spacing: 12) {
+                Button { showExportDialog = true } label: {
+                    Text("导出").frame(maxWidth: .infinity).frame(height: 52)
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColor.divider))
                 }
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("卫星离线：在「在线影像」底图下，已下载区域断网自动显示")
-        }
-        .alert("编辑标注点", isPresented: $showEditWaypoint) {
-            TextField("名称", text: $editWpName)
-            TextField("备注（可选）", text: $editWpNote)
-            Button("保存") { saveWaypointEdit() }
-            Button("取消", role: .cancel) {}
-        }
-        .confirmationDialog("更改类型", isPresented: $showKindDialog, titleVisibility: .visible) {
-            ForEach(WaypointKind.allOrdered, id: \.self) { k in
-                Button(k.label) { changeWaypointKind(to: k) }
-            }
-            Button("取消", role: .cancel) {}
+                NavigationLink { NavigationRunView(trackId: trackId) } label: {
+                    Text("使用轨迹导航").fontWeight(.semibold).foregroundColor(.white)
+                        .frame(maxWidth: .infinity).frame(height: 52).background(AppColor.primary).cornerRadius(14)
+                }
+            }.padding()
         }
     }
 
@@ -173,6 +153,19 @@ struct TrackDetailView: View {
                     }
                 }
             }
+        }
+        // 航点编辑/改类型弹窗下放到本页（触发源在此列表），分担 body 的类型检查负担
+        .alert("编辑标注点", isPresented: $showEditWaypoint) {
+            TextField("名称", text: $editWpName)
+            TextField("备注（可选）", text: $editWpNote)
+            Button("保存") { saveWaypointEdit() }
+            Button("取消", role: .cancel) {}
+        }
+        .confirmationDialog("更改类型", isPresented: $showKindDialog, titleVisibility: .visible) {
+            ForEach(WaypointKind.allOrdered, id: \.self) { k in
+                Button(k.label) { changeWaypointKind(to: k) }
+            }
+            Button("取消", role: .cancel) {}
         }
     }
 
@@ -278,6 +271,18 @@ struct TrackDetailView: View {
                 ElevationProfileView(samples: profile, selected: $selectedProfileIndex)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        // 底图选择弹窗下放到地图页（触发源在地图控件「图层」），分担 body 类型检查负担
+        .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
+            Button("在线影像（ESRI，含已缓存离线区域）") { baseMode = .onlineRaster }
+            ForEach(OfflineMaps.list().filter { OfflineMaps.isVectorBase($0) }, id: \.self) { url in
+                Button("离线矢量 · \(url.deletingPathExtension().lastPathComponent)") {
+                    baseMode = .offlineVector(path: url.path)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("卫星离线：在「在线影像」底图下，已下载区域断网自动显示")
         }
     }
 
