@@ -3,6 +3,18 @@ import UIKit
 import MapLibre
 import CoreLocation
 
+/// 叠加轨迹配色（避开主轨迹红 #FF3B30）：蓝/紫/橙/青/品红/棕，按序循环。
+/// 同一索引在地图折线(uiColor)与图例(color)取色一致，保证图例颜色↔轨迹对得上。
+enum OverlayPalette {
+    static let hexes: [UInt] = [0x2980F5, 0x9C59F2, 0xF2730D, 0x21BAA9, 0xE84D94, 0x8C6638]
+    static func color(_ i: Int) -> Color { Color(hex: hexes[i % hexes.count]) }
+    static func uiColor(_ i: Int) -> UIColor {
+        let h = hexes[i % hexes.count]
+        return UIColor(red: CGFloat((h >> 16) & 0xFF) / 255, green: CGFloat((h >> 8) & 0xFF) / 255,
+                       blue: CGFloat(h & 0xFF) / 255, alpha: 1)
+    }
+}
+
 /// MapLibre 地图封装（任务 2.1~2.4）。WGS-84。
 /// 当前底图：**在线栅格**（开发期联调，默认 OSM）；离线 PMTiles 矢量底图后续替换（任务 2.2）。
 struct MapLibreView: UIViewRepresentable {
@@ -124,16 +136,6 @@ struct MapLibreView: UIViewRepresentable {
         private var overlaySig: [String] = []   // 叠加轨迹签名，变化时才重建（去抖）
         private var overlayLayerIds: [String] = []   // 当前叠加线图层 id，便于整体移除
         private var overlaySourceIds: [String] = []  // 当前叠加线数据源 id
-
-        /// 叠加轨迹配色（避开主轨迹红 #FF3B30）：蓝/紫/橙/青/品红/棕，按序循环分配。
-        static let overlayPalette: [UIColor] = [
-            UIColor(red: 0.16, green: 0.50, blue: 0.96, alpha: 1),
-            UIColor(red: 0.61, green: 0.35, blue: 0.95, alpha: 1),
-            UIColor(red: 0.95, green: 0.45, blue: 0.05, alpha: 1),
-            UIColor(red: 0.13, green: 0.73, blue: 0.66, alpha: 1),
-            UIColor(red: 0.91, green: 0.30, blue: 0.58, alpha: 1),
-            UIColor(red: 0.55, green: 0.40, blue: 0.22, alpha: 1),
-        ]
 
         init(_ parent: MapLibreView) {
             self.parent = parent
@@ -489,7 +491,7 @@ struct MapLibreView: UIViewRepresentable {
                                          options: nil)
                 style.addSource(src)
                 let layer = MLNLineStyleLayer(identifier: lid, source: src)
-                layer.lineColor = NSExpression(forConstantValue: Self.overlayPalette[i % Self.overlayPalette.count])
+                layer.lineColor = NSExpression(forConstantValue: OverlayPalette.uiColor(i))
                 layer.lineWidth = NSExpression(forConstantValue: 3)
                 layer.lineCap = NSExpression(forConstantValue: "round")
                 // 有主轨迹时插在其下（不盖住红色当前轨迹）；主地图无主轨迹则直接加在最上

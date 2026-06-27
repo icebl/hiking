@@ -23,10 +23,10 @@ struct MapScreen: View {
     @State private var measurePoints: [CLLocationCoordinate2D] = []  // 测量时按点击顺序累积的坐标点
     @State private var showRadar = false                     // 距离雷达（以当前定位为中心的同心圈）开关
     @State private var showToolSheet = false                 // 是否弹出工具箱对话框
-    // 多轨迹叠加：选中的轨迹 id 集合 + 其坐标折线（传给地图按调色板着色显示）
+    // 多轨迹叠加：选中的轨迹 id 集合 + 有序叠加项（含名称/坐标）；颜色按 overlayItems 下标稳定分配
     @State private var showOverlaySheet = false              // 是否弹出叠加轨迹选择面板
     @State private var overlaySelection: Set<UUID> = []      // 当前勾选叠加的轨迹 id
-    @State private var overlayPolylines: [[CLLocationCoordinate2D]] = []  // 选中轨迹的坐标，供地图叠加
+    @State private var overlayItems: [OverlayItem] = []      // 有序叠加项（顺序=颜色下标=图例顺序）
 
     var body: some View {
         ZStack {
@@ -34,7 +34,7 @@ struct MapScreen: View {
             MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
-                         showRoadNetwork: showRoadNetwork, overlays: overlayPolylines,
+                         showRoadNetwork: showRoadNetwork, overlays: overlayItems.map(\.coords),
                          onTap: { c in
                              // 测量进行中：点击落点累积进折线/多边形；否则只读取经纬度显示
                              if measure != .none { measurePoints.append(c) }
@@ -68,7 +68,7 @@ struct MapScreen: View {
                 Spacer()
                 VStack(spacing: 14) {
                     ctrl("square.3.stack.3d", "图层") { showLayerSheet = true }   // 切底图：在线影像/离线矢量
-                    ctrl("square.on.square", "叠加", active: !overlayPolylines.isEmpty) { showOverlaySheet = true }
+                    ctrl("square.on.square", "叠加", active: !overlayItems.isEmpty) { showOverlaySheet = true }
                     ctrl("wrench.and.screwdriver", "工具", active: measure != .none || showRadar) { showToolSheet = true }
                     Spacer()
                     VStack(spacing: 8) {                       // 缩放：+/- 与滑块同一区
@@ -110,10 +110,11 @@ struct MapScreen: View {
                 .padding(.bottom, 96)
             }
 
-            // 底部：测量条（测距/面积时）+ 记录 / 导航
+            // 底部：测量条（测距/面积时）+ 叠加图例（有叠加时）+ 记录 / 导航
             VStack {
                 Spacer()
                 if measure != .none { measureBar.padding(.horizontal, 16).padding(.bottom, 8) }
+                if !overlayItems.isEmpty { overlayLegend.padding(.horizontal, 16).padding(.bottom, 8) }
                 HStack(spacing: 12) {
                     Button { showRecording = true } label: { cta("记录", "record.circle", .white, AppColor.ink) }
                     // 导航按钮暂时隐藏（功能保留，待 4.5 选轨迹进入导航后再开放）
@@ -154,21 +155,29 @@ struct MapScreen: View {
         }
     }
 
-    /// 按当前勾选的轨迹 id 加载坐标折线，并把相机框到全部叠加范围。
+    /// 按当前勾选加载有序叠加项（用 listTracks 顺序保证稳定→颜色不乱跳），并框住全部范围。
     /// 点数 <2 的轨迹跳过；空选则清空叠加。
     private func loadOverlays() {
         let repo = TrackRepository()
-        overlayPolylines = overlaySelection.compactMap { id in
-            let pts = (try? repo.points(trackId: id)) ?? []
+        let all = (try? repo.listTracks()) ?? []
+        overlayItems = all.filter { overlaySelection.contains($0.id) }.compactMap { t in
+            let pts = (try? repo.points(trackId: t.id)) ?? []
             guard pts.count > 1 else { return nil }
-            return pts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+            return OverlayItem(id: t.id, name: t.name,
+                               coords: pts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
         }
         fitToOverlays()
     }
 
+    /// 从图例移除单条叠加：同时从勾选集合剔除，地图与图例随 overlayItems 变化刷新。
+    private func removeOverlay(_ id: UUID) {
+        overlaySelection.remove(id)
+        overlayItems.removeAll { $0.id == id }
+    }
+
     /// 把相机框到所有叠加轨迹的外接矩形（有叠加时）。
     private func fitToOverlays() {
-        let all = overlayPolylines.flatMap { $0 }
+        let all = overlayItems.flatMap { $0.coords }
         guard let first = all.first else { return }
         var minLat = first.latitude, maxLat = first.latitude
         var minLon = first.longitude, maxLon = first.longitude
@@ -181,6 +190,39 @@ struct MapScreen: View {
     }
 
     // MARK: - 子组件
+
+    /// 叠加图例：列出每条叠加轨迹的颜色块 + 名称 + 移除按钮（颜色与地图折线同源、按下标对应）。
+    /// 条目多时纵向滚动，限制最大高度避免遮挡过多地图。
+    private var overlayLegend: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("叠加轨迹 \(overlayItems.count)").font(.caption).foregroundColor(.white.opacity(0.8))
+                Spacer()
+                Button { overlaySelection.removeAll(); overlayItems = [] } label: {
+                    Text("全部移除").font(.caption).foregroundColor(AppColor.recording)
+                }
+            }
+            .padding(.bottom, 6)
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(Array(overlayItems.enumerated()), id: \.element.id) { idx, item in
+                        HStack(spacing: 10) {
+                            RoundedRectangle(cornerRadius: 2).fill(OverlayPalette.color(idx))
+                                .frame(width: 16, height: 4)              // 颜色块（对应地图折线色）
+                            Text(item.name).font(.caption).foregroundColor(.white).lineLimit(1)
+                            Spacer()
+                            Button { removeOverlay(item.id) } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundColor(.white.opacity(0.7))
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 132)   // 约 4~5 条，超出滚动
+        }
+        .padding(.vertical, 10).padding(.horizontal, 14)
+        .background(Color.black.opacity(0.78)).cornerRadius(12)
+    }
 
     /// 当前是否为离线矢量底图（路网/标注仅此模式有效）。
     private var isVectorBase: Bool {
@@ -325,6 +367,14 @@ struct MapScreen: View {
         HStack { Image(systemName: icon); Text(t).fontWeight(.semibold) }
             .foregroundColor(fg).frame(maxWidth: .infinity).frame(height: 52).background(bg).cornerRadius(AppRadius.button)
     }
+}
+
+/// 一条叠加轨迹：id 用于增删与缓存键，name 供图例显示，coords 供地图绘制。
+/// 在 overlayItems 中的下标即调色板颜色下标（图例与地图一致）。
+private struct OverlayItem: Identifiable {
+    let id: UUID
+    let name: String
+    let coords: [CLLocationCoordinate2D]
 }
 
 /// 叠加轨迹选择面板：多选已存轨迹，「完成」回调把选择应用到主地图。
