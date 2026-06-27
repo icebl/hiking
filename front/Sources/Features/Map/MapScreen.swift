@@ -23,6 +23,10 @@ struct MapScreen: View {
     @State private var measurePoints: [CLLocationCoordinate2D] = []  // 测量时按点击顺序累积的坐标点
     @State private var showRadar = false                     // 距离雷达（以当前定位为中心的同心圈）开关
     @State private var showToolSheet = false                 // 是否弹出工具箱对话框
+    // 多轨迹叠加：选中的轨迹 id 集合 + 其坐标折线（传给地图按调色板着色显示）
+    @State private var showOverlaySheet = false              // 是否弹出叠加轨迹选择面板
+    @State private var overlaySelection: Set<UUID> = []      // 当前勾选叠加的轨迹 id
+    @State private var overlayPolylines: [[CLLocationCoordinate2D]] = []  // 选中轨迹的坐标，供地图叠加
 
     var body: some View {
         ZStack {
@@ -30,7 +34,7 @@ struct MapScreen: View {
             MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
-                         showRoadNetwork: showRoadNetwork,
+                         showRoadNetwork: showRoadNetwork, overlays: overlayPolylines,
                          onTap: { c in
                              // 测量进行中：点击落点累积进折线/多边形；否则只读取经纬度显示
                              if measure != .none { measurePoints.append(c) }
@@ -64,7 +68,7 @@ struct MapScreen: View {
                 Spacer()
                 VStack(spacing: 14) {
                     ctrl("square.3.stack.3d", "图层") { showLayerSheet = true }   // 切底图：在线影像/离线矢量
-                    ctrl("square.on.square", "叠加")          // TODO: 多轨迹叠加面板
+                    ctrl("square.on.square", "叠加", active: !overlayPolylines.isEmpty) { showOverlaySheet = true }
                     ctrl("wrench.and.screwdriver", "工具", active: measure != .none || showRadar) { showToolSheet = true }
                     Spacer()
                     VStack(spacing: 8) {                       // 缩放：+/- 与滑块同一区
@@ -144,6 +148,36 @@ struct MapScreen: View {
         } message: {
             Text("卫星离线：在「在线影像」底图下，已框选下载的区域断网自动显示")
         }
+        // 叠加轨迹选择面板：多选已存轨迹 → 应用后加载坐标并框住范围
+        .sheet(isPresented: $showOverlaySheet) {
+            OverlayPickerView(selection: $overlaySelection) { loadOverlays() }
+        }
+    }
+
+    /// 按当前勾选的轨迹 id 加载坐标折线，并把相机框到全部叠加范围。
+    /// 点数 <2 的轨迹跳过；空选则清空叠加。
+    private func loadOverlays() {
+        let repo = TrackRepository()
+        overlayPolylines = overlaySelection.compactMap { id in
+            let pts = (try? repo.points(trackId: id)) ?? []
+            guard pts.count > 1 else { return nil }
+            return pts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        }
+        fitToOverlays()
+    }
+
+    /// 把相机框到所有叠加轨迹的外接矩形（有叠加时）。
+    private func fitToOverlays() {
+        let all = overlayPolylines.flatMap { $0 }
+        guard let first = all.first else { return }
+        var minLat = first.latitude, maxLat = first.latitude
+        var minLon = first.longitude, maxLon = first.longitude
+        for c in all {
+            minLat = min(minLat, c.latitude); maxLat = max(maxLat, c.latitude)
+            minLon = min(minLon, c.longitude); maxLon = max(maxLon, c.longitude)
+        }
+        mapCtrl.fit(sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
+                    ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon))
     }
 
     // MARK: - 子组件
@@ -290,5 +324,53 @@ struct MapScreen: View {
     private func cta(_ t: String, _ icon: String, _ bg: Color, _ fg: Color) -> some View {
         HStack { Image(systemName: icon); Text(t).fontWeight(.semibold) }
             .foregroundColor(fg).frame(maxWidth: .infinity).frame(height: 52).background(bg).cornerRadius(AppRadius.button)
+    }
+}
+
+/// 叠加轨迹选择面板：多选已存轨迹，「完成」回调把选择应用到主地图。
+/// selection 与主视图双向绑定（保留上次勾选）；onApply 在关闭前触发加载。
+private struct OverlayPickerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selection: Set<UUID>
+    var onApply: () -> Void
+    @State private var tracks: [Track] = []   // 列表数据，进入时一次性查库
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if tracks.isEmpty {
+                    Text("暂无已保存的轨迹").foregroundColor(AppColor.ink2)
+                } else {
+                    ForEach(tracks) { t in
+                        Button { toggle(t.id) } label: {
+                            HStack(spacing: 12) {
+                                // 勾选态用实心对勾，未选用空心圈
+                                Image(systemName: selection.contains(t.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(selection.contains(t.id) ? AppColor.primary : AppColor.ink2)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(t.name).foregroundColor(AppColor.ink)
+                                    Text(String(format: "%.1f km", t.distance / 1000))
+                                        .font(.caption).foregroundColor(AppColor.ink2)
+                                }
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .navigationTitle("叠加轨迹")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { Button("清空") { selection.removeAll() } }
+                ToolbarItem(placement: .topBarTrailing) { Button("完成") { onApply(); dismiss() } }
+            }
+            .task { tracks = (try? TrackRepository().listTracks()) ?? [] }
+        }
+    }
+
+    /// 勾选/取消某条轨迹。
+    private func toggle(_ id: UUID) {
+        if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
     }
 }

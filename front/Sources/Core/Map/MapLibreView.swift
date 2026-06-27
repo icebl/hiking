@@ -32,6 +32,8 @@ struct MapLibreView: UIViewRepresentable {
     var showRoadNetwork: Bool = false
     /// 航点/标注点（按 kind 上色显示，点击弹名称气泡）。
     var waypoints: [Waypoint] = []
+    /// 叠加轨迹：每条一组坐标，按调色板分配不同颜色画在底图上（主地图「叠加」功能）。
+    var overlays: [[CLLocationCoordinate2D]] = []
     /// 居中目标（如从标注点列表点击某点 → 地图居中）；变化时触发一次居中。
     var centerOn: CLLocationCoordinate2D? = nil
     /// 点击地图回调（取经纬度，任务 2.8）
@@ -88,6 +90,7 @@ struct MapLibreView: UIViewRepresentable {
         coord.updateRadar(on: map)
         coord.updateRoadNetwork(on: map)
         coord.updateWaypoints(on: map)
+        coord.updateOverlays(on: map)
         coord.updateCenter(on: map)
     }
 
@@ -118,6 +121,19 @@ struct MapLibreView: UIViewRepresentable {
         private var trackSource: MLNShapeSource? // 轨迹折线数据源；样式重载后置 nil 触发重建
         private var didFit = false               // 是否已把相机框到轨迹范围（fitToTrack 仅做一次）
         private var endpointsAdded = false      // 起终点为标注(跨样式重载存活)，只加一次
+        private var overlaySig: [String] = []   // 叠加轨迹签名，变化时才重建（去抖）
+        private var overlayLayerIds: [String] = []   // 当前叠加线图层 id，便于整体移除
+        private var overlaySourceIds: [String] = []  // 当前叠加线数据源 id
+
+        /// 叠加轨迹配色（避开主轨迹红 #FF3B30）：蓝/紫/橙/青/品红/棕，按序循环分配。
+        static let overlayPalette: [UIColor] = [
+            UIColor(red: 0.16, green: 0.50, blue: 0.96, alpha: 1),
+            UIColor(red: 0.61, green: 0.35, blue: 0.95, alpha: 1),
+            UIColor(red: 0.95, green: 0.45, blue: 0.05, alpha: 1),
+            UIColor(red: 0.13, green: 0.73, blue: 0.66, alpha: 1),
+            UIColor(red: 0.91, green: 0.30, blue: 0.58, alpha: 1),
+            UIColor(red: 0.55, green: 0.40, blue: 0.22, alpha: 1),
+        ]
 
         init(_ parent: MapLibreView) {
             self.parent = parent
@@ -149,6 +165,8 @@ struct MapLibreView: UIViewRepresentable {
             updateRadar(on: mapView)
             updateRoadNetwork(on: mapView)  // 路网层可见性（离线矢量样式自带该层）
             updateWaypoints(on: mapView)    // 航点标注（跨样式重载存活，靠签名去重）
+            overlaySig = []                 // 样式重载后叠加层源已失效，清签名以强制重建
+            updateOverlays(on: mapView)
             parent.controller?.zoom = mapView.zoomLevel
         }
 
@@ -446,6 +464,39 @@ struct MapLibreView: UIViewRepresentable {
             }
             map.addAnnotations(anns)
             waypointAnnotations = anns
+        }
+
+        /// 叠加轨迹：每条用调色板不同颜色画成折线，插在主轨迹之下避免遮挡。
+        /// 按签名(每条的点数+首点)去重，仅在叠加集合变化时整体重建。
+        func updateOverlays(on map: MLNMapView) {
+            guard let style = map.style else { return }
+            // 签名：序号+点数+首点坐标，足以反映「选了哪几条、各自是否变化」
+            let sig = parent.overlays.enumerated().map { i, c in
+                "\(i):\(c.count):\(c.first?.latitude ?? 0),\(c.first?.longitude ?? 0)"
+            }
+            guard sig != overlaySig else { return }
+            // 先整体移除旧叠加层与源
+            for id in overlayLayerIds { if let l = style.layer(withIdentifier: id) { style.removeLayer(l) } }
+            for id in overlaySourceIds { if let s = style.source(withIdentifier: id) { style.removeSource(s) } }
+            overlayLayerIds = []; overlaySourceIds = []
+            overlaySig = sig
+            // 逐条重建（点数 <2 的跳过）
+            for (i, coords) in parent.overlays.enumerated() where coords.count > 1 {
+                var pts = coords
+                let sid = "overlay-src-\(i)", lid = "overlay-line-\(i)"
+                let src = MLNShapeSource(identifier: sid,
+                                         shape: MLNPolylineFeature(coordinates: &pts, count: UInt(pts.count)),
+                                         options: nil)
+                style.addSource(src)
+                let layer = MLNLineStyleLayer(identifier: lid, source: src)
+                layer.lineColor = NSExpression(forConstantValue: Self.overlayPalette[i % Self.overlayPalette.count])
+                layer.lineWidth = NSExpression(forConstantValue: 3)
+                layer.lineCap = NSExpression(forConstantValue: "round")
+                // 有主轨迹时插在其下（不盖住红色当前轨迹）；主地图无主轨迹则直接加在最上
+                if let track = style.layer(withIdentifier: "track-line") { style.insertLayer(layer, below: track) }
+                else { style.addLayer(layer) }
+                overlaySourceIds.append(sid); overlayLayerIds.append(lid)
+            }
         }
 
         private var lastCenter: CLLocationCoordinate2D?   // 上次居中坐标，去重避免每次 update 都重复居中
