@@ -14,7 +14,8 @@ struct NavigationRunView: View {
 
     var body: some View {
         ZStack {
-            MapLibreView(trackCoordinates: ctrl.planCoordinates, showsUserLocation: true, fitToTrack: true)
+            MapLibreView(trackCoordinates: ctrl.planCoordinates, showsUserLocation: true, fitToTrack: true,
+                         waypoints: ctrl.waypoints)
                 .ignoresSafeArea()
 
             if !started { directionChooser } else { navigatingOverlay }
@@ -72,6 +73,8 @@ struct NavigationRunView: View {
                 banner("⚠ 已偏离计划线 \(Int(ctrl.distanceToLine))m，请返回", AppColor.warning)
             } else if ctrl.arrived {
                 banner("🏁 已到达终点附近", AppColor.primary)
+            } else if let w = ctrl.nearbyWaypoint {
+                banner("📍 前方 \(Int(ctrl.nearbyWaypointDistance))m · \(w.kind.label) \(w.name)", w.kind.color)
             }
             Spacer()
 

@@ -21,6 +21,9 @@ enum AppSettings {
     static var recordWhileNav: Bool {             // 导航时同时记录（默认）
         d.object(forKey: "recordWhileNav") != nil ? d.bool(forKey: "recordWhileNav") : true
     }
+    static var waypointApproach: Double {         // 航点接近提醒半径（米）
+        d.object(forKey: "waypointApproach") != nil ? Double(d.integer(forKey: "waypointApproach")) : 80
+    }
     static var coordFormat: String {              // 坐标格式
         d.string(forKey: "coordFormat") ?? "度 dd.ddddd°"
     }

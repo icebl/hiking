@@ -15,6 +15,9 @@ final class NavigationController: ObservableObject {
     @Published var arrived = false
     @Published var reverse = false
     @Published var isRecording = false              // 是否同时记录实走
+    @Published var waypoints: [Waypoint] = []       // 沿线航点（地图显示）
+    @Published var nearbyWaypoint: Waypoint?        // 当前最近的接近中航点（驱动横幅）
+    @Published var nearbyWaypointDistance: Double = 0
 
     private let engine = NavigationEngine()
     private let location = LocationManager.shared
@@ -25,6 +28,9 @@ final class NavigationController: ObservableObject {
     private var running = false
 
     private let arriveThreshold: Double = 30        // 接近终点（m）
+    private var nearbyIds: Set<UUID> = []           // 已提醒过的接近航点（滞回防重复）
+    private var approachThreshold: Double = 80      // 进入此半径 → 接近提醒（m，读设置）
+    private var clearThreshold: Double = 130        // 离开此半径 → 解除，可再次提醒（m，= 接近 + 50 滞回）
 
     func start(trackId: UUID, reverse: Bool, alsoRecord: Bool) {
         guard !running else { return }
@@ -35,8 +41,11 @@ final class NavigationController: ObservableObject {
 
         engine.offRouteThreshold = AppSettings.offRouteThreshold          // 读设置：偏航阈值
         engine.clearThreshold = max(5, AppSettings.offRouteThreshold - 10) // 滞回解除阈值
+        approachThreshold = AppSettings.waypointApproach                  // 读设置：航点接近提醒半径
+        clearThreshold = approachThreshold + 50                           // 解除阈值（滞回）
 
         let pts = (try? TrackRepository().points(trackId: trackId)) ?? []
+        waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []   // 沿线航点
         let l = NavigationEngine.buildLine(points: pts, reverse: reverse)
         line = l
         planCoordinates = l.points
@@ -81,6 +90,28 @@ final class NavigationController: ObservableObject {
             if engine.isOffRoute { fireOffRouteAlert(distance: dist) }
         }
         isOffRoute = engine.isOffRoute
+
+        updateWaypointProximity(loc)
+    }
+
+    /// 沿线航点接近检测：进入 approachThreshold 触发一次提醒，离开 clearThreshold 后可再次提醒（滞回）。
+    private func updateWaypointProximity(_ loc: CLLocation) {
+        guard !waypoints.isEmpty else { return }
+        var closest: (w: Waypoint, d: Double)?
+        for w in waypoints {
+            let d = loc.distance(from: CLLocation(latitude: w.lat, longitude: w.lon))
+            if d <= approachThreshold {
+                if closest == nil || d < closest!.d { closest = (w, d) }
+                if !nearbyIds.contains(w.id) {
+                    nearbyIds.insert(w.id)
+                    fireWaypointAlert(w, distance: d)
+                }
+            } else if d > clearThreshold {
+                nearbyIds.remove(w.id)
+            }
+        }
+        nearbyWaypoint = closest?.w
+        nearbyWaypointDistance = closest?.d ?? 0
     }
 
     // MARK: - 提醒
@@ -91,6 +122,16 @@ final class NavigationController: ObservableObject {
         content.body = "距计划线约 \(Int(distance)) m，请返回轨迹。"
         content.sound = .default
         let req = UNNotificationRequest(identifier: "offroute-\(UUID().uuidString)", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req)
+    }
+
+    private func fireWaypointAlert(_ w: Waypoint, distance: Double) {
+        UINotificationFeedbackGenerator().notificationOccurred(w.kind == .danger ? .warning : .success)
+        let content = UNMutableNotificationContent()
+        content.title = "前方\(w.kind.label)"
+        content.body = "约 \(Int(distance)) m · \(w.name)"
+        content.sound = .default
+        let req = UNNotificationRequest(identifier: "wp-\(w.id.uuidString)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req)
     }
 

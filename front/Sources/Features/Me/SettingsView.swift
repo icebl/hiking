@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage("autoPause") private var autoPause = true
     @AppStorage("useBarometer") private var useBarometer = true
     @AppStorage("offRouteThreshold") private var offRouteThreshold = 25
+    @AppStorage("waypointApproach") private var waypointApproach = 80
     @AppStorage("voiceAlert") private var voiceAlert = false
     @AppStorage("voiceInterval") private var voiceInterval = 5
     @AppStorage("recordWhileNav") private var recordWhileNav = true
@@ -20,6 +21,7 @@ struct SettingsView: View {
     @State private var dAutoPause = true
     @State private var dBaro = true
     @State private var dOffRoute = 25
+    @State private var dWpApproach = 80
     @State private var dVoice = false
     @State private var dVoiceInt = 5
     @State private var dRecNav = true
@@ -36,6 +38,7 @@ struct SettingsView: View {
             }
             Section("导航") {
                 Stepper("偏航阈值 \(dOffRoute) 米", value: $dOffRoute, in: 10...100, step: 5)
+                Stepper("航点接近提醒 \(dWpApproach) 米", value: $dWpApproach, in: 30...300, step: 10)
                 Toggle("语音播报", isOn: $dVoice)
                 if dVoice { Picker("播报间隔", selection: $dVoiceInt) { Text("5 分钟").tag(5); Text("10 分钟").tag(10) } }
                 Toggle("导航时同时记录", isOn: $dRecNav)
@@ -66,19 +69,22 @@ struct SettingsView: View {
 
     private var dirty: Bool {
         dSample != sampleInterval || dMinMove != minMove || dAutoPause != autoPause
-        || dBaro != useBarometer || dOffRoute != offRouteThreshold || dVoice != voiceAlert
+        || dBaro != useBarometer || dOffRoute != offRouteThreshold || dWpApproach != waypointApproach
+        || dVoice != voiceAlert
         || dVoiceInt != voiceInterval || dRecNav != recordWhileNav || dCoord != coordFormat
     }
 
     private func loadDraft() {
         dSample = sampleInterval; dMinMove = minMove; dAutoPause = autoPause; dBaro = useBarometer
-        dOffRoute = offRouteThreshold; dVoice = voiceAlert; dVoiceInt = voiceInterval
+        dOffRoute = offRouteThreshold; dWpApproach = waypointApproach
+        dVoice = voiceAlert; dVoiceInt = voiceInterval
         dRecNav = recordWhileNav; dCoord = coordFormat
     }
 
     private func apply() {
         sampleInterval = dSample; minMove = dMinMove; autoPause = dAutoPause; useBarometer = dBaro
-        offRouteThreshold = dOffRoute; voiceAlert = dVoice; voiceInterval = dVoiceInt
+        offRouteThreshold = dOffRoute; waypointApproach = dWpApproach
+        voiceAlert = dVoice; voiceInterval = dVoiceInt
         recordWhileNav = dRecNav; coordFormat = dCoord
         justSaved = true
     }
