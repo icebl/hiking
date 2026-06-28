@@ -1,9 +1,11 @@
 name: iOS Build (unsigned IPA)
 
 # 在云端 macOS 上编译出未签名的 .ipa，供 Sideloadly/AltStore 用你的 Apple ID 重签后安装。
-# 触发：仅手动运行（Actions 页面 Run workflow）——macOS runner 10× 计费，攒够改动再手动构建以省额度。
+# 触发：推送到 main 自动构建，或在 Actions 页面手动运行（workflow_dispatch）。
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:

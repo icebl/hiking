@@ -34,13 +34,13 @@ struct TrackTrimView: View {
                 HStack {
                     Text("起点").font(.caption).foregroundColor(AppColor.ink2).frame(width: 36, alignment: .leading)
                     Slider(value: $fromIdx, in: 0...Double(max(1, coords.count - 1)), step: 1)
-                        .onChange(of: fromIdx) { if fromIdx > toIdx - 1 { fromIdx = max(0, toIdx - 1) } }
+                        .onChange(of: fromIdx) { _ in if fromIdx > toIdx - 1 { fromIdx = max(0, toIdx - 1) } }
                 }
                 // 终点滑块（不得越过起点）
                 HStack {
                     Text("终点").font(.caption).foregroundColor(AppColor.ink2).frame(width: 36, alignment: .leading)
                     Slider(value: $toIdx, in: 0...Double(max(1, coords.count - 1)), step: 1)
-                        .onChange(of: toIdx) { if toIdx < fromIdx + 1 { toIdx = min(Double(coords.count - 1), fromIdx + 1) } }
+                        .onChange(of: toIdx) { _ in if toIdx < fromIdx + 1 { toIdx = min(Double(coords.count - 1), fromIdx + 1) } }
                 }
 
                 HStack(spacing: 12) {
