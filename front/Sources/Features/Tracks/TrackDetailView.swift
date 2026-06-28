@@ -38,6 +38,7 @@ struct TrackDetailView: View {
     @State private var kindPickWaypoint: Waypoint?      // 正在更改类型的航点
     @State private var showKindDialog = false           // 是否弹出类型选择面板
     @State private var viewerImage: UIImage?            // 正在全屏查看的航点照片（nil=不显示）
+    @State private var showTrim = false                 // 裁剪首尾页
 
     // body 拆分：导航栏修饰留在 body，内容与各类弹窗下放到 content/子视图，
     // 避免单个表达式过大触发「类型检查超时」。
@@ -52,6 +53,10 @@ struct TrackDetailView: View {
                         Button { renameText = track?.name ?? ""; showRename = true } label: {
                             Label("重命名", systemImage: "pencil")
                         }
+                        // 轨迹编辑：均另存为新轨迹，原轨迹保留
+                        Button { reverseSave() } label: { Label("反向另存", systemImage: "arrow.uturn.left") }
+                        Button { splitSegments() } label: { Label("按段拆分", systemImage: "scissors") }
+                        Button { showTrim = true } label: { Label("裁剪首尾", systemImage: "crop") }
                         Button(role: .destructive) { showDeleteConfirm = true } label: {
                             Label("删除轨迹", systemImage: "trash")
                         }
@@ -87,6 +92,9 @@ struct TrackDetailView: View {
         } message: { Text("删除后可在云端同步前恢复（三期）；本机列表将移除。") }
         .sheet(isPresented: $showShare) {
             if let exportURL { ShareSheet(items: [exportURL]) }
+        }
+        .sheet(isPresented: $showTrim) {
+            NavigationStack { TrackTrimView(trackId: trackId) { showToast("已保存裁剪轨迹（在列表查看）") } }
         }
         .confirmationDialog("导出格式", isPresented: $showExportDialog, titleVisibility: .visible) {
             Button("GPX") { export(.gpx) }
@@ -373,6 +381,20 @@ struct TrackDetailView: View {
     private func deleteTrack() {
         try? TrackRepository().softDelete(id: trackId)
         dismiss()
+    }
+    /// 反向另存为新轨迹。
+    private func reverseSave() {
+        do {
+            if try TrackEditor.reverseSave(trackId) != nil { showToast("已另存反向轨迹（在列表查看）") }
+            else { showToast("点数不足，无法反向") }
+        } catch { showToast("操作失败") }
+    }
+    /// 按段拆分为多条新轨迹（单段则提示无法拆分）。
+    private func splitSegments() {
+        do {
+            let n = try TrackEditor.splitBySegment(trackId)
+            showToast(n > 1 ? "已拆为 \(n) 段（在列表查看）" : "只有一段，无法拆分")
+        } catch { showToast("操作失败") }
     }
     /// 切换等高线：未导入等高线包时给出提示而非切换，避免开了开关却看不到东西。
     private func toggleContours() {

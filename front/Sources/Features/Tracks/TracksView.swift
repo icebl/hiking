@@ -248,12 +248,23 @@ struct TracksView: View {
                 selectedIDs = (selectedIDs.count == ids.count && !ids.isEmpty) ? [] : ids
             } label: { batchItem("checklist", selectedIDs.count == shown.count && !shown.isEmpty ? "全不选" : "全选") }
 
+            Button { mergeSelected() } label: { batchItem("arrow.triangle.merge", "合并") }
             Button { requireSelection { showBatchExport() } } label: { batchItem("square.and.arrow.up", "导出") }
             Button { requireSelection { showBatchMove = true } } label: { batchItem("folder", "移动") }
             Button { requireSelection { showBatchDelete = true } } label: { batchItem("trash", "删除", tint: AppColor.recording) }
         }
         .padding(.horizontal, 8).padding(.vertical, 8)
         .overlay(Divider(), alignment: .top)
+    }
+
+    /// 合并选中轨迹（≥2 条）为一条新轨迹；按列表顺序首尾相接，原轨迹保留。
+    private func mergeSelected() {
+        guard selectedIDs.count >= 2 else { showToast("至少选 2 条轨迹合并"); return }
+        let ordered = shown.filter { selectedIDs.contains($0.id) }.map { $0.id }   // 按列表顺序，结果稳定
+        do {
+            if try TrackEditor.merge(ordered) != nil { selectedIDs = []; reload(); showToast("已合并为新轨迹") }
+            else { showToast("合并失败") }
+        } catch { showToast("合并失败") }
     }
 
     /// 有选中才执行操作，否则提示先选择（统一三个批量按钮的空选行为）。
