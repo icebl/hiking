@@ -11,6 +11,11 @@ on:
 jobs:
   build:
     runs-on: macos-15
+    env:
+      # runner 镜像预装了未受信任的 tap(aws/tap)，新版 Homebrew 的 tap 信任校验会打断 brew install。
+      # 关掉信任校验，让 brew install xcodegen 正常进行（xcodegen 来自 homebrew-core）。
+      HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
+      HOMEBREW_NO_AUTO_UPDATE: 1   # 跳过自动 update，加快并避免触发 tap 扫描
     steps:
       - name: Checkout
         uses: actions/checkout@v4
