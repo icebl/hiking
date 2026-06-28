@@ -46,22 +46,27 @@ jobs:
         working-directory: front
         run: |
           set -o pipefail
-          # 完整日志存盘 + xcpretty 美化输出；失败时从完整日志提取真正的 error: 行
-          xcodebuild \
-            -project Hiking.xcodeproj \
-            -scheme Hiking \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build \
-            -clonedSourcePackagesDirPath SourcePackages \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            clean build 2>&1 | tee xcodebuild-full.log | xcpretty || true
-          status=${PIPESTATUS[0]}   # 取 xcodebuild 的真实退出码（非 xcpretty 的）
-          if [ "$status" -ne 0 ]; then
+          # 完整日志存盘 + xcpretty 美化输出。
+          # 关键：用 `if 管道; then` 直接判定管道退出码，配合 set -o pipefail
+          # 让 xcodebuild 的失败穿透 tee/xcpretty 传出来。
+          # （旧写法 `... | xcpretty || true; status=${PIPESTATUS[0]}` 有坑：
+          #  `|| true` 会执行 true 把 PIPESTATUS 重置成 0，导致编译失败被误判成功，
+          #  最终打出「缺主程序二进制」的残缺 .app —— 真机装不上。）
+          if xcodebuild \
+              -project Hiking.xcodeproj \
+              -scheme Hiking \
+              -configuration Release \
+              -sdk iphoneos \
+              -derivedDataPath build \
+              -clonedSourcePackagesDirPath SourcePackages \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              clean build 2>&1 | tee xcodebuild-full.log | xcpretty; then
+            echo "✅ 编译通过"
+          else
             echo "::group::Swift 编译错误（从完整日志提取）"
-            grep -nE "error: " xcodebuild-full.log || tail -120 xcodebuild-full.log
+            grep -nE "error: " xcodebuild-full.log || tail -150 xcodebuild-full.log
             echo "::endgroup::"
-            exit "$status"
+            exit 1
           fi
 
       - name: Package unsigned IPA
@@ -69,6 +74,14 @@ jobs:
         run: |
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
           echo "App: $APP"
+          # 护栏：.app 内必须有同名主程序二进制（如 Hiking.app/Hiking），否则真机装不上。
+          # 此前出现过「编译其实失败、却被打成缺二进制的残缺包」，这里硬校验、缺则直接失败。
+          APP_NAME=$(basename "$APP" .app)
+          if [ ! -f "$APP/$APP_NAME" ]; then
+            echo "❌ 打包中止：$APP 内缺少可执行文件 $APP_NAME（编译可能失败了）"
+            ls -la "$APP"
+            exit 1
+          fi
           rm -rf Payload && mkdir -p Payload
           cp -R "$APP" Payload/
           zip -qr Hiking-unsigned.ipa Payload

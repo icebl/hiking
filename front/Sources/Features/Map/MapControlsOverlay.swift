@@ -111,7 +111,8 @@ struct MapControlsOverlay: View {
             DragGesture()
                 .onChanged { v in
                     zoomDragging = true
-                    controller.setZoom(fraction: 1 - Double(v.location.y) / trackH)
+                    // 注意：trackH 为 CGFloat，需一并转 Double，否则 Double/CGFloat 混算导致 '-' 重载歧义
+                    controller.setZoom(fraction: 1 - Double(v.location.y) / Double(trackH))
                 }
                 .onEnded { _ in zoomDragging = false }
         )

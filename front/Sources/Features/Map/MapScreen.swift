@@ -32,6 +32,14 @@ struct MapScreen: View {
     @State private var measurePoints: [CLLocationCoordinate2D] = []  // 测量时按点击顺序累积的坐标点
     @State private var showRadar = false                     // 距离雷达（以当前定位为中心的同心圈）开关
     @State private var showToolSheet = false                 // 是否弹出工具箱对话框
+    // 收藏点（独立 POI，trackId=nil）：工具箱「收藏点」模式下点地图落点
+    @State private var savingPOI = false                     // 收藏点模式
+    @State private var pois: [Waypoint] = []                 // 已存独立收藏点（地图显示）
+    @State private var poiPendingCoord: CLLocationCoordinate2D?  // 待落点坐标（选类型后落）
+    @State private var showPoiKind = false                   // 收藏点类型选择
+    @State private var editingPOI: Waypoint?                 // 点图标编辑中的收藏点
+    @State private var poiCameraFor: UUID?                   // 拍照类型收藏点等待配图的 id
+    @State private var showPoiCamera = false                 // 收藏点拍照相机
     // 多轨迹叠加：选中的轨迹 id 集合 + 有序叠加项（含名称/坐标）；颜色按 overlayItems 下标稳定分配
     @State private var showOverlaySheet = false              // 是否弹出叠加轨迹选择面板
     @State private var overlaySelection: Set<UUID> = []      // 当前勾选叠加的轨迹 id
@@ -44,17 +52,20 @@ struct MapScreen: View {
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
                          highlightCoordinate: probeCoord ?? tappedCoord,   // 长按测距点优先，其次取点高亮（橙点）
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
-                         showRoadNetwork: showRoadNetwork, overlays: overlayItems.map(\.coords),
+                         showRoadNetwork: showRoadNetwork, waypoints: pois, overlays: overlayItems.map(\.coords),
                          onTap: { c in
-                             // 测量中→落测量点；取点模式→取经纬度+查海拔+高亮；都不是→忽略点击
+                             // 测量→落测量点；取点→取经纬度；收藏点→选类型落 POI；都不是→忽略
                              if measure != .none { measurePoints.append(c) }
                              else if pickingCoord {
                                  tapped = CoordFormatter.string(c, format: AppSettings.coordFormat)
                                  tappedCoord = c
                                  fetchTappedElevation(c)
+                             } else if savingPOI {
+                                 poiPendingCoord = c; showPoiKind = true
                              }
                          },
-                         onLongPress: { c in probeDistance(c) })   // 长按：该点距我直线距离/方位
+                         onLongPress: { c in probeDistance(c) },   // 长按：该点距我直线距离/方位
+                         onWaypointSelect: { id in editingPOI = pois.first { $0.id == id } })  // 点收藏点→编辑
                 .ignoresSafeArea()
 
             // 信息条：靠上居中（WGS84 浅绿高亮）；取点模式且未取点时提示点击地图
@@ -62,6 +73,10 @@ struct MapScreen: View {
                 infoBar
                 if pickingCoord && tapped == nil {
                     Text("点击地图取经纬度").font(.caption).foregroundColor(.white)
+                        .padding(.vertical, 5).padding(.horizontal, 12)
+                        .background(AppColor.primary.opacity(0.9)).cornerRadius(10)
+                } else if savingPOI {
+                    Text("点击地图添加收藏点").font(.caption).foregroundColor(.white)
                         .padding(.vertical, 5).padding(.horizontal, 12)
                         .background(AppColor.primary.opacity(0.9)).cornerRadius(10)
                 }
@@ -89,7 +104,7 @@ struct MapScreen: View {
                 VStack(spacing: 14) {
                     ctrl("square.3.stack.3d", "图层") { showLayerSheet = true }   // 切底图：在线影像/离线矢量
                     ctrl("square.on.square", "叠加", active: !overlayItems.isEmpty) { showOverlaySheet = true }
-                    ctrl("wrench.and.screwdriver", "工具", active: measure != .none || showRadar || pickingCoord) { showToolSheet = true }
+                    ctrl("wrench.and.screwdriver", "工具", active: measure != .none || showRadar || pickingCoord || savingPOI) { showToolSheet = true }
                     Spacer()
                     VStack(spacing: 8) {                       // 缩放：+/- 与滑块同一区
                         zoomGroup
@@ -164,18 +179,31 @@ struct MapScreen: View {
         .fullScreenCover(isPresented: $showRecording) { RecordingView() }
         // 进入主地图即前台定位（驱动信息条实时经纬度/海拔）；离开页面停止以省电。
         // 注：记录/导航页各自管理后台定位，互不影响（最后一次 start 的配置生效）。
-        .onAppear { loc.requestWhenInUse(); loc.start(background: false) }
+        .onAppear { loc.requestWhenInUse(); loc.start(background: false); loadPOIs() }
         .onDisappear { loc.stop() }
         // 工具箱对话框：取点/测距/面积三者互斥（都吃点击），切换时互相清理，避免状态串扰
         .confirmationDialog("工具箱", isPresented: $showToolSheet, titleVisibility: .visible) {
-            Button("取点（经纬度）") { measure = .none; measurePoints = []; clearTapped(); pickingCoord = true }
-            Button("测距") { measure = .distance; measurePoints = []; clearTapped(); pickingCoord = false }
-            Button("面积") { measure = .area; measurePoints = []; clearTapped(); pickingCoord = false }
+            Button("收藏点（点地图加点）") { measure = .none; measurePoints = []; clearTapped(); pickingCoord = false; savingPOI = true }
+            Button("取点（经纬度）") { measure = .none; measurePoints = []; clearTapped(); pickingCoord = true; savingPOI = false }
+            Button("测距") { measure = .distance; measurePoints = []; clearTapped(); pickingCoord = false; savingPOI = false }
+            Button("面积") { measure = .area; measurePoints = []; clearTapped(); pickingCoord = false; savingPOI = false }
             Button(showRadar ? "关闭距离雷达" : "距离雷达") { showRadar.toggle() }
             if measure != .none { Button("退出测量", role: .destructive) { measure = .none; measurePoints = [] } }
             if pickingCoord { Button("退出取点", role: .destructive) { exitPicking() } }
+            if savingPOI { Button("退出收藏点", role: .destructive) { savingPOI = false } }
             Button("取消", role: .cancel) {}
-        } message: { Text("取点：点地图取经纬度；测距/面积：连点测量；距离雷达：以定位为中心同心圈") }
+        } message: { Text("收藏点：点地图加点；取点：取经纬度；测距/面积：连点测量；距离雷达：同心圈") }
+        // 收藏点类型选择：点地图后选类型落点；拍照类型随后开相机配图
+        .confirmationDialog("收藏点类型", isPresented: $showPoiKind, titleVisibility: .visible) {
+            ForEach(WaypointKind.allOrdered, id: \.self) { k in Button(k.label) { addPOI(k) } }
+            Button("取消", role: .cancel) { poiPendingCoord = nil }
+        }
+        // 收藏点拍照配图
+        .sheet(isPresented: $showPoiCamera) {
+            CameraPicker { img in if let id = poiCameraFor { WaypointPhotoStore.save(img, id: id); poiCameraFor = nil; loadPOIs() } }
+        }
+        // 点收藏点图标 → 编辑
+        .sheet(item: $editingPOI) { w in WaypointEditSheet(waypoint: w) { loadPOIs() } }
         // 底图选择对话框：固定一项在线影像 + 动态列出本地已导入的矢量包
         .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
             // 在线源：卫星影像 / 地形图 / 街道图（ESRI）
@@ -312,6 +340,21 @@ struct MapScreen: View {
         }
     }
 
+    /// 读取所有独立收藏点（地图显示）。
+    private func loadPOIs() { pois = (try? TrackRepository().independentWaypoints()) ?? [] }
+
+    /// 在待落点坐标处新建一个收藏点；拍照类型随后开相机配图。
+    private func addPOI(_ kind: WaypointKind) {
+        guard let c = poiPendingCoord else { return }
+        let w = Waypoint(id: UUID(), trackId: nil, name: "\(kind.label)\(pois.count + 1)", kind: kind,
+                         lat: c.latitude, lon: c.longitude, elevation: nil, note: nil,
+                         createdAt: Date(), updatedAt: Date(), isDeleted: false, isSynced: false)
+        try? TrackRepository().addWaypoint(w)
+        poiPendingCoord = nil
+        loadPOIs()
+        if kind == .photo { poiCameraFor = w.id; showPoiCamera = true }
+    }
+
     /// 异步查询点击点的海拔（在线 DEM）：先显示"查询中"，得到结果回填米数或"未知"。
     private func fetchTappedElevation(_ c: CLLocationCoordinate2D) {
         tappedEle = "海拔 查询中…"
@@ -428,7 +471,8 @@ struct MapScreen: View {
                 .onChanged { v in
                     zoomDragging = true
                     // 触点 y 反转归一化为 0…1：顶部=1(最大缩放)，底部=0；再驱动地图缩放
-                    zoomLevel = min(1, max(0, 1 - Double(v.location.y) / trackH))
+                    // 注意：trackH 为 CGFloat，需一并转 Double，否则 Double/CGFloat 混算导致 '-' 重载歧义
+                    zoomLevel = min(1, max(0, 1 - Double(v.location.y) / Double(trackH)))
                     mapCtrl.setZoom(fraction: zoomLevel)
                 }
                 .onEnded { _ in zoomDragging = false }
