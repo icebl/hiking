@@ -168,6 +168,16 @@ struct TrackRepository {
         }
     }
 
+    /// 独立收藏点（trackId 为空、未删除）：地图直接打的 POI，不属于任何轨迹。按创建时间排序。
+    func independentWaypoints() throws -> [Waypoint] {
+        try db.dbQueue.read { dbx in
+            try Waypoint
+                .filter(Column("trackId") == nil && Column("isDeleted") == false)
+                .order(Column("createdAt"))
+                .fetchAll(dbx)
+        }
+    }
+
     /// 新增单个航点（记录中打点）。
     func addWaypoint(_ w: Waypoint) throws {
         try db.dbQueue.write { dbx in var x = w; x.updatedAt = Date(); try x.save(dbx) }

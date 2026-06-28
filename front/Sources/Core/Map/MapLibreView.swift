@@ -56,6 +56,8 @@ struct MapLibreView: UIViewRepresentable {
     var initialZoom: Double = 11
     /// 长按地图回调（返回长按点坐标，用于"该点距我直线距离/方位"）。新参数一律追加到末尾。
     var onLongPress: ((CLLocationCoordinate2D) -> Void)? = nil
+    /// 点中航点标注回调（返回航点 id，用于编辑收藏点）。提供时点标注不弹名称气泡而走此回调。
+    var onWaypointSelect: ((UUID) -> Void)? = nil
 
     /// 创建 Coordinator（持有可变状态、充当 MLNMapView 的 delegate）。
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -187,9 +189,16 @@ struct MapLibreView: UIViewRepresentable {
             return nil
         }
 
-        // 航点标注可弹名称气泡（callout）。
+        // 航点标注可弹名称气泡（callout）；但提供了选中回调时（主地图收藏点）改为点击进编辑，不弹气泡。
         func mapView(_ mapView: MLNMapView, annotationCanShowCallout annotation: MLNAnnotation) -> Bool {
-            annotation is WaypointAnnotation
+            annotation is WaypointAnnotation && parent.onWaypointSelect == nil
+        }
+
+        // 点中航点：回调其 id（用于编辑收藏点），并立即取消选中以便再次点击。
+        func mapView(_ mapView: MLNMapView, didSelect annotation: MLNAnnotation) {
+            guard let w = annotation as? WaypointAnnotation, let cb = parent.onWaypointSelect else { return }
+            cb(w.id)
+            mapView.deselectAnnotation(annotation, animated: false)
         }
 
         // 跟随模式变化（用户拖动会打断 .follow）→ 同步定位键高亮
@@ -497,6 +506,7 @@ struct MapLibreView: UIViewRepresentable {
                 let a = WaypointAnnotation()
                 a.coordinate = CLLocationCoordinate2D(latitude: w.lat, longitude: w.lon)
                 a.kind = w.kind
+                a.id = w.id
                 a.title = w.name
                 if let note = w.note, !note.isEmpty { a.subtitle = note }
                 else if let e = w.elevation { a.subtitle = "海拔 \(Int(e)) m" }
@@ -709,9 +719,10 @@ final class HighlightAnnotation: MLNPointAnnotation {}
 /// 距离雷达半径标注。
 final class RadarLabelAnnotation: MLNPointAnnotation { var text = "" }
 
-/// 航点/标注点数据（带类型，决定颜色与图标）。
+/// 航点/标注点数据（带类型决定颜色图标，带 id 供点击编辑）。
 final class WaypointAnnotation: MLNPointAnnotation {
     var kind: WaypointKind = .other
+    var id = UUID()
 }
 
 /// 航点标注视图：圆底按 kind 上色 + 白色 SF Symbol 图标 + 白描边。

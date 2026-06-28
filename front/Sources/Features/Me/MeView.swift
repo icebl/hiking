@@ -24,6 +24,7 @@ struct MeView: View {
                 // 功能入口：离线地图 / 导入轨迹 / 设置 / 关于
                 Section("入口") {
                     NavigationLink { OfflineMapsView() } label: { Label("离线地图", systemImage: "square.3.stack.3d") }
+                    NavigationLink { FavoritesView() } label: { Label("收藏点", systemImage: "mappin.and.ellipse") }
                     NavigationLink { ImportPreviewView() } label: { Label("导入轨迹", systemImage: "square.and.arrow.down") }
                     NavigationLink { SettingsView() } label: { Label("设置", systemImage: "gearshape") }
                     NavigationLink { AboutView() } label: {
