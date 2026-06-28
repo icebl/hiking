@@ -5,6 +5,7 @@ import SwiftUI
 ///   左列：回到原点（重新框住轨迹）
 struct MapControlsOverlay: View {
     @ObservedObject var controller: MapController   // 复用同一地图控制器，读缩放/定位状态并下发操作
+    @State private var zoomDragging = false         // 缩放滑块拖动中（控制左侧数值气泡显隐）
     @Binding var showKm: Bool                       // 公里标开关（由父视图持有）
     var showContours: Bool = false                  // 等高线高亮态（仅显示用，开关动作走 onContours）
     var hasProfile: Bool = false                    // 是否有高程剖面数据，决定剖面控件是否出现
@@ -83,25 +84,37 @@ struct MapControlsOverlay: View {
     }
 
     /// 缩放滑块：与 MapScreen 不同，这里由地图当前 zoom 在 [minZoom,maxZoom] 的占比反推圆点位置。
+    /// 加长滑轨；绿点滑块不放数字，拖动时数值在左侧白气泡显示（避免被手指遮挡）。
     private var zoomSlider: some View {
+        let trackH: CGFloat = 220, thumb: CGFloat = 28
         // 把当前缩放级别归一化到 0…1；区间无效时取中点 0.5
         let frac = (controller.maxZoom - controller.minZoom) > 0
             ? (controller.zoom - controller.minZoom) / (controller.maxZoom - controller.minZoom) : 0.5
+        let y = CGFloat(1 - min(1, max(0, frac))) * (trackH - thumb)
         return ZStack(alignment: .top) {
-            Capsule().fill(Color.white.opacity(0.6)).frame(width: 4, height: 110)
-            ZStack {
-                Circle().fill(AppColor.primary).frame(width: 30, height: 30)
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+            Capsule().fill(Color.white.opacity(0.6)).frame(width: 4, height: trackH)
+            if zoomDragging {
                 Text(String(format: "%.1f", controller.zoom))
-                    .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 14, weight: .bold)).foregroundColor(AppColor.ink)
+                    .padding(.vertical, 5).padding(.horizontal, 10)
+                    .background(Color.white).cornerRadius(9)
+                    .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+                    .offset(x: -48, y: y + thumb / 2 - 14)
             }
-            .offset(y: CGFloat(1 - min(1, max(0, frac))) * 83)
+            Circle().fill(AppColor.primary).frame(width: thumb, height: thumb)
+                .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                .offset(y: y)
         }
-        .frame(width: 30, height: 113)
+        .frame(width: thumb, height: trackH)
         .contentShape(Rectangle())
-        .gesture(DragGesture().onChanged { v in
-            controller.setZoom(fraction: 1 - Double(v.location.y) / 113)
-        })
+        .gesture(
+            DragGesture()
+                .onChanged { v in
+                    zoomDragging = true
+                    controller.setZoom(fraction: 1 - Double(v.location.y) / trackH)
+                }
+                .onEnded { _ in zoomDragging = false }
+        )
     }
 
     private func ctrl(_ icon: String, _ label: String, active: Bool = false,

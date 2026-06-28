@@ -19,6 +19,7 @@ struct MapScreen: View {
     @State private var probeCoord: CLLocationCoordinate2D?   // 长按测距：目标点（地图高亮）
     @State private var probeText: String?                   // 长按测距：距我/方位读数
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1），1=最大
+    @State private var zoomDragging = false     // 缩放滑块拖动中（控制左侧数值气泡显隐）
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
     @State private var showRoadNetwork = false   // 路网开关（仅离线矢量底图有效）
@@ -400,26 +401,36 @@ struct MapScreen: View {
     }
 
     /// 缩放滑块（上滑放大 / 下滑缩小）；绿色圆点内显示当前缩放级别（取代原顶部读数）。
+    /// 加长滑轨；绿点滑块不再放数字，拖动时数值在滑块左侧白气泡显示（避免被手指遮挡）。
     private var zoomSlider: some View {
-        ZStack(alignment: .top) {
-            Capsule().fill(Color.white.opacity(0.6)).frame(width: 4, height: 110)
-            ZStack {
-                Circle().fill(AppColor.primary).frame(width: 30, height: 30)
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+        let trackH: CGFloat = 220, thumb: CGFloat = 28
+        let y = CGFloat(1 - zoomLevel) * (trackH - thumb)   // 圆点在轨道内的纵向位置
+        return ZStack(alignment: .top) {
+            Capsule().fill(Color.white.opacity(0.6)).frame(width: 4, height: trackH)
+            // 拖动中：数值气泡在滑块左侧
+            if zoomDragging {
                 Text(String(format: "%.1f", mapCtrl.zoom))
-                    .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                    .font(.system(size: 14, weight: .bold)).foregroundColor(AppColor.ink)
+                    .padding(.vertical, 5).padding(.horizontal, 10)
+                    .background(Color.white).cornerRadius(9)
+                    .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+                    .offset(x: -48, y: y + thumb / 2 - 14)   // 左移到滑块旁、与其垂直居中对齐
             }
-            .offset(y: CGFloat(1 - zoomLevel) * 83)   // zoomLevel=1 时圆点在顶端，越大越上
+            Circle().fill(AppColor.primary).frame(width: thumb, height: thumb)
+                .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                .offset(y: y)
         }
-        .frame(width: 30, height: 113)
+        .frame(width: thumb, height: trackH)
         .contentShape(Rectangle())
         .gesture(
-            DragGesture().onChanged { v in
-                // 触点 y 反转归一化为 0…1：顶部=1(最大缩放)，底部=0；再驱动地图缩放
-                let frac = 1 - Double(v.location.y) / 113
-                zoomLevel = min(1, max(0, frac))
-                mapCtrl.setZoom(fraction: zoomLevel)
-            }
+            DragGesture()
+                .onChanged { v in
+                    zoomDragging = true
+                    // 触点 y 反转归一化为 0…1：顶部=1(最大缩放)，底部=0；再驱动地图缩放
+                    zoomLevel = min(1, max(0, 1 - Double(v.location.y) / trackH))
+                    mapCtrl.setZoom(fraction: zoomLevel)
+                }
+                .onEnded { _ in zoomDragging = false }
         )
     }
 

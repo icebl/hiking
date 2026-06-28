@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>视觉稿 · 缩放滑块改版（加长 + 左侧数值气泡）</title>
+<style>
+  :root{ --primary:#1F9D55; --ink:#1C1C1E; --divider:#E5E7EB; }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{font-family:-apple-system,"PingFang SC",system-ui,sans-serif;background:#0e1116;color:#e8eaed;
+    padding:36px 20px;display:flex;flex-wrap:wrap;gap:40px;justify-content:center;align-items:flex-start;}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .label{font-size:13px;color:#9aa0a6;text-align:center;max-width:360px;line-height:1.6;}
+  .label b{color:#fff;}
+
+  .phone{width:360px;height:740px;background:#000;border-radius:44px;padding:10px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);position:relative;}
+  .screen{width:100%;height:100%;border-radius:34px;overflow:hidden;position:relative;
+    background:radial-gradient(130% 110% at 60% 30%,#b9c6ab 0%,#aabd9c 50%,#9fb691 100%);}
+  .island{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:104px;height:28px;background:#000;border-radius:16px;z-index:60;}
+
+  /* 等高线/轨迹示意 */
+  .map svg{position:absolute;inset:0;width:100%;height:100%;}
+
+  /* 右列：+/- 与滑轨 */
+  .zoom{position:absolute;right:14px;top:150px;width:36px;background:#fff;border-radius:18px;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:30;}
+  .zoom div{height:36px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#1C1C1E;font-weight:600;}
+  .zoom div:first-child{border-bottom:1px solid var(--divider);}
+
+  /* 加长滑轨：原 ~113pt → 现 ~230pt */
+  .slider{position:absolute;right:25px;top:240px;width:4px;height:230px;
+    background:rgba(255,255,255,.7);border-radius:2px;z-index:30;}
+  /* 绿色圆点滑块（不再放数字） */
+  .thumb{position:absolute;left:50%;transform:translateX(-50%);width:28px;height:28px;border-radius:50%;
+    background:var(--primary);box-shadow:0 2px 6px rgba(0,0,0,.3);}
+  /* 拖动时：数值白气泡在滑块左侧（右尖角指向滑块），不被手指遮挡 */
+  .bubble{position:absolute;right:34px;background:#fff;color:#1C1C1E;font-weight:700;font-size:15px;
+    padding:6px 12px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.22);white-space:nowrap;}
+  .bubble::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);
+    border:6px solid transparent;border-left-color:#fff;}
+  /* 模拟手指 */
+  .finger{position:absolute;width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.18);z-index:35;}
+
+  .scalebar{position:absolute;left:16px;bottom:24px;color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.6);z-index:30;}
+  .scalebar .bar{height:6px;border-left:2px solid #fff;border-right:2px solid #fff;border-bottom:2px solid #fff;width:64px;margin-top:2px;}
+</style>
+</head>
+<body>
+
+<!-- 改版后：拖动中 -->
+<div class="col">
+  <div class="phone"><div class="screen">
+    <div class="island"></div>
+    <div class="map"><svg viewBox="0 0 340 720" preserveAspectRatio="none">
+      <g fill="none" stroke="#36C5C0" stroke-width="1.4" opacity="0.85">
+        <path d="M-10,120 C80,90 150,160 240,140 C300,128 330,180 360,160"/>
+        <path d="M-10,200 C90,175 160,235 250,215 C310,202 340,250 360,235"/>
+        <path d="M-10,300 C100,270 170,330 260,312 C320,300 345,345 360,330"/>
+        <path d="M-10,430 C100,400 180,460 270,442 C325,430 348,470 360,458"/>
+        <path d="M-10,560 C110,530 185,590 275,572"/>
+      </g>
+      <path d="M150,650 C160,560 130,470 165,380 C190,300 160,220 175,150" fill="none" stroke="#FF3B30" stroke-width="3.4" stroke-linecap="round"/>
+    </svg></div>
+
+    <!-- +/- -->
+    <div class="zoom"><div>+</div><div>−</div></div>
+
+    <!-- 加长滑轨 + 拖动中的左侧数值气泡 -->
+    <div class="slider">
+      <!-- 滑块在轨道约 38% 处 -->
+      <div class="thumb" style="top:88px;"></div>
+      <div class="bubble" style="top:90px;">13.8</div>
+      <div class="finger" style="right:-24px;top:76px;"></div>
+    </div>
+
+    <!-- 比例尺（左下，保持） -->
+    <div class="scalebar">500 m<div class="bar"></div></div>
+  </div></div>
+  <div class="label"><b>改版 · 拖动中</b><br>① 滑轨加长（≈113→230pt），缩放更细腻<br>② 数值「13.8」在滑块<b>左侧白气泡</b>（右尖角指向滑块），手指压在滑块上也看得见</div>
+</div>
+
+<!-- 对比：原样式 -->
+<div class="col">
+  <div class="phone"><div class="screen" style="background:radial-gradient(130% 110% at 60% 30%,#c2cdb5,#b7c3a8);">
+    <div class="island"></div>
+    <div class="zoom"><div>+</div><div>−</div></div>
+    <!-- 原短滑轨 + 数字在绿点内（被手指挡） -->
+    <div class="slider" style="height:113px;top:300px;">
+      <div class="thumb" style="top:40px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;">13.8</div>
+      <div class="finger" style="right:-23px;top:39px;"></div>
+    </div>
+  </div></div>
+  <div class="label"><b>原样式（问题）</b><br>滑轨短、数字塞在绿点里<br>拖动时被手指完全遮挡</div>
+</div>
+
+</body>
+</html>
