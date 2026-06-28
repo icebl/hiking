@@ -8,7 +8,7 @@ enum ImportService {
         case unsupported(String)
         var errorDescription: String? {
             switch self {
-            case .unsupported(let ext): return "暂不支持的文件类型：.\(ext)（目前支持 GPX、KML；KMZ 待后续）"
+            case .unsupported(let ext): return "暂不支持的文件类型：.\(ext)（目前支持 GPX、KML、KMZ）"
             }
         }
     }
@@ -20,6 +20,7 @@ enum ImportService {
         switch url.pathExtension.lowercased() {
         case "gpx": tracks = try GPXService().parse(url: url)
         case "kml": tracks = try KMLService().parse(url: url)
+        case "kmz": tracks = try KMLService().parse(url: KMZArchive.extractKML(from: url))  // 解压取 .kml 再解析
         default:    throw ImportError.unsupported(url.pathExtension.lowercased())
         }
         let base = url.deletingPathExtension().lastPathComponent   // 去扩展名的文件名

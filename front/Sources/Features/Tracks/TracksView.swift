@@ -366,9 +366,9 @@ struct ImportPreviewView: View {
 
     init(fileURL: URL? = nil) { self.fileURL = fileURL }
 
-    // 允许导入的文件类型：GPX / KML
+    // 允许导入的文件类型：GPX / KML / KMZ
     private static let importTypes: [UTType] =
-        ["gpx", "kml"].compactMap { UTType(filenameExtension: $0) }
+        ["gpx", "kml", "kmz"].compactMap { UTType(filenameExtension: $0) }
 
     var body: some View {
         Group {

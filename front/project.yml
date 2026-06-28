@@ -69,7 +69,8 @@ targets:
             LSItemContentTypes:
               - com.topografix.gpx
               - com.google.earth.kml
-        # —— 类型声明（GPX / KML）——
+              - com.google.earth.kmz
+        # —— 类型声明（GPX / KML / KMZ）——
         UTImportedTypeDeclarations:
           - UTTypeIdentifier: com.topografix.gpx
             UTTypeConformsTo: [public.xml]
@@ -81,5 +82,11 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension: [kml]
               public.mime-type: [application/vnd.google-earth.kml+xml]
+          - UTTypeIdentifier: com.google.earth.kmz
+            UTTypeConformsTo: [public.zip-archive]
+            UTTypeDescription: KMZ 轨迹（压缩 KML）
+            UTTypeTagSpecification:
+              public.filename-extension: [kmz]
+              public.mime-type: [application/vnd.google-earth.kmz]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
