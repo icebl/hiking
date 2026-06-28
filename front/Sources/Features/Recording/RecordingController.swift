@@ -123,9 +123,25 @@ final class RecordingController: ObservableObject {
                              ascent: ascent, descent: descent, pointCount: pointCount)
         try? repo.deleteSession(id: id)
         let track = try repo.track(id: id)
+        let firstCoord = liveCoordinates.first   // 反向地理编码用起点，需在 reset 清空前取
         reset()
         guard let track else { throw NSError(domain: "Recording", code: -2) }
+        // 结束后异步按地点重命名（不阻塞收尾；地名回来再写库）
+        if AppSettings.autoNameByPlace, let c = firstCoord { autoRenameByPlace(trackId: id, near: c) }
         return track
+    }
+
+    /// 反向地理编码起点取地名，命名为「<地名> 徒步」并写库。失败/无网/无结果则保留默认日期名。
+    /// CLGeocoder 回调在主线程；只在拿到非空地名时改名。
+    private func autoRenameByPlace(trackId: UUID, near c: CLLocationCoordinate2D) {
+        let loc = CLLocation(latitude: c.latitude, longitude: c.longitude)
+        CLGeocoder().reverseGeocodeLocation(loc) { placemarks, _ in
+            guard let p = placemarks?.first else { return }
+            // 优先景点名(如山名)，再镇/街道，再市，再 POI 名
+            let place = p.areasOfInterest?.first ?? p.subLocality ?? p.locality ?? p.name
+            guard let place, !place.isEmpty else { return }
+            try? TrackRepository().rename(id: trackId, name: "\(place) 徒步")
+        }
     }
 
     /// 取消并丢弃在记轨迹（导航同时记录选“不保存”用）。

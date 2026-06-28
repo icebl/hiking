@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage("sampleInterval") private var sampleInterval = 5
     @AppStorage("minMove") private var minMove = 5
     @AppStorage("autoPause") private var autoPause = true
+    @AppStorage("autoNameByPlace") private var autoNameByPlace = true
     @AppStorage("useBarometer") private var useBarometer = true
     @AppStorage("offRouteThreshold") private var offRouteThreshold = 25
     @AppStorage("waypointApproach") private var waypointApproach = 80
@@ -21,6 +22,7 @@ struct SettingsView: View {
     @State private var dSample = 5         // 采样间隔(秒) 1…30
     @State private var dMinMove = 5        // 最小位移(米) 1…50
     @State private var dAutoPause = true   // 静止自动暂停
+    @State private var dAutoName = true    // 结束时按地点自动命名
     @State private var dBaro = true        // 气压计辅助海拔
     @State private var dOffRoute = 25      // 偏航阈值(米) 10…100
     @State private var dWpApproach = 80    // 航点接近提醒(米) 30…300
@@ -40,6 +42,7 @@ struct SettingsView: View {
                 Toggle("静止自动暂停", isOn: $dAutoPause)
                 Toggle("气压计辅助海拔", isOn: $dBaro)
                 Toggle("省电定位（降精度，更省电）", isOn: $dPowerSave)
+                Toggle("按地点自动命名轨迹", isOn: $dAutoName)
             }
             Section("导航") {
                 Stepper("偏航阈值 \(dOffRoute) 米", value: $dOffRoute, in: 10...100, step: 5)
@@ -76,7 +79,7 @@ struct SettingsView: View {
 
     /// 草稿与持久化值是否有差异：决定「确认修改」按钮可用与高亮，任一项不同即为脏。
     private var dirty: Bool {
-        dSample != sampleInterval || dMinMove != minMove || dAutoPause != autoPause
+        dSample != sampleInterval || dMinMove != minMove || dAutoPause != autoPause || dAutoName != autoNameByPlace
         || dBaro != useBarometer || dOffRoute != offRouteThreshold || dWpApproach != waypointApproach
         || dVoice != voiceAlert
         || dVoiceInt != voiceInterval || dRecNav != recordWhileNav || dCoord != coordFormat
@@ -86,6 +89,7 @@ struct SettingsView: View {
     /// 进入页面时把持久化值灌入草稿，保证界面初始展示与已保存设置一致。
     private func loadDraft() {
         dSample = sampleInterval; dMinMove = minMove; dAutoPause = autoPause; dBaro = useBarometer
+        dAutoName = autoNameByPlace
         dOffRoute = offRouteThreshold; dWpApproach = waypointApproach
         dVoice = voiceAlert; dVoiceInt = voiceInterval
         dRecNav = recordWhileNav; dCoord = coordFormat
@@ -95,6 +99,7 @@ struct SettingsView: View {
     /// 点「确认修改」时把草稿写回 @AppStorage 真正生效，并标记 justSaved 用于按钮反馈。
     private func apply() {
         sampleInterval = dSample; minMove = dMinMove; autoPause = dAutoPause; useBarometer = dBaro
+        autoNameByPlace = dAutoName
         offRouteThreshold = dOffRoute; waypointApproach = dWpApproach
         voiceAlert = dVoice; voiceInterval = dVoiceInt
         recordWhileNav = dRecNav; coordFormat = dCoord

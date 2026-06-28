@@ -11,6 +11,9 @@ enum AppSettings {
     static var autoPause: Bool {                 // 静止自动暂停
         d.object(forKey: "autoPause") != nil ? d.bool(forKey: "autoPause") : true
     }
+    static var autoNameByPlace: Bool {           // 结束时按地点自动命名轨迹（反向地理编码，默认开）
+        d.object(forKey: "autoNameByPlace") != nil ? d.bool(forKey: "autoNameByPlace") : true
+    }
     static var useBarometer: Bool {              // 气压计辅助海拔（关则仅 GPS）
         d.object(forKey: "useBarometer") != nil ? d.bool(forKey: "useBarometer") : true
     }
