@@ -2,9 +2,39 @@ import Foundation
 import CoreLocation
 import GRDB
 
-/// 底图模式：在线栅格（ESRI）/ 离线矢量（本地 PMTiles）/ 离线影像（本地 MBTiles 栅格）。
+/// 在线栅格底图源（ESRI ArcGIS，免 key、国内可达）：卫星影像 / 地形图 / 街道图。
+enum OnlineBaseSource: String, CaseIterable, Equatable {
+    case satellite, topo, street
+
+    var label: String {
+        switch self {
+        case .satellite: return "在线影像"
+        case .topo:      return "地形图"
+        case .street:    return "街道图"
+        }
+    }
+    /// ArcGIS 瓦片模板（{z}/{y}/{x}）。
+    var urlTemplate: String {
+        let base = "https://server.arcgisonline.com/ArcGIS/rest/services"
+        switch self {
+        case .satellite: return "\(base)/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+        case .topo:      return "\(base)/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+        case .street:    return "\(base)/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+        }
+    }
+    /// 最高级别（超过则过缩放，避免请求到无数据灰瓦片）：影像深，地形国内略浅。
+    var maxZoom: Int {
+        switch self {
+        case .satellite: return 18
+        case .topo:      return 17
+        case .street:    return 18
+        }
+    }
+}
+
+/// 底图模式：在线栅格（ESRI，带源）/ 离线矢量（本地 PMTiles）/ 离线影像（本地 MBTiles 栅格）。
 enum MapBaseMode: Equatable {
-    case onlineRaster
+    case onlineRaster(OnlineBaseSource)
     case offlineVector(path: String)
     case offlineRaster(path: String)
 }

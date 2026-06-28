@@ -20,7 +20,7 @@ struct MapScreen: View {
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
     @State private var showRoadNetwork = false   // 路网开关（仅离线矢量底图有效）
-    @State private var baseMode: MapBaseMode = .onlineRaster  // 当前底图：默认在线影像，可切离线矢量
+    @State private var baseMode: MapBaseMode = .onlineRaster(.satellite)  // 当前底图：默认在线影像，可切地形/街道/离线矢量
     @State private var showLayerSheet = false                // 是否弹出底图选择对话框
     // 工具箱：测距 / 面积 / 距离雷达
     enum MeasureMode { case none, distance, area }           // 测量模式：无 / 测距(折线) / 面积(多边形)
@@ -172,7 +172,10 @@ struct MapScreen: View {
         } message: { Text("取点：点地图取经纬度；测距/面积：连点测量；距离雷达：以定位为中心同心圈") }
         // 底图选择对话框：固定一项在线影像 + 动态列出本地已导入的矢量包
         .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
-            Button("在线影像（ESRI，含已缓存离线区域）") { baseMode = .onlineRaster }
+            // 在线源：卫星影像 / 地形图 / 街道图（ESRI）
+            ForEach(OnlineBaseSource.allCases, id: \.self) { src in
+                Button(src == .satellite ? "在线影像（含已缓存离线区域）" : src.label) { baseMode = .onlineRaster(src) }
+            }
             ForEach(OfflineMaps.list().filter { OfflineMaps.isVectorBase($0) }, id: \.self) { url in
                 Button("离线矢量 · \(url.deletingPathExtension().lastPathComponent)") {
                     baseMode = .offlineVector(path: url.path)   // 切到该矢量包作为底图

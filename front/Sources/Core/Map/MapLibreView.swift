@@ -22,8 +22,8 @@ struct MapLibreView: UIViewRepresentable {
     /// 控制桥接：缩放/定位/居中由 SwiftUI 控件经 MapController 调用（任务 2.3）。
     var controller: MapController? = nil
 
-    /// 底图模式：在线栅格(ESRI) / 离线矢量(本地 PMTiles)（任务 2.2 / 2.6）
-    var baseMode: MapBaseMode = .onlineRaster
+    /// 底图模式：在线栅格(ESRI，带源) / 离线矢量(本地 PMTiles)（任务 2.2 / 2.6）
+    var baseMode: MapBaseMode = .onlineRaster(.satellite)
 
     var trackCoordinates: [CLLocationCoordinate2D] = []
     var showsUserLocation: Bool = true
@@ -51,13 +51,7 @@ struct MapLibreView: UIViewRepresentable {
     /// 点击地图回调（取经纬度，任务 2.8）
     var onTap: ((CLLocationCoordinate2D) -> Void)? = nil
 
-    /// 在线栅格底图模板（单常量便于切换）。上线/离线仍走自建底图。
-    /// 说明：OSM 公共瓦片对 UA 有策略限制→白图；ESRI 世界地形图(World_Topo_Map)在中国区高层级(~z16+)无缓存，
-    /// 会返回 "Map data not yet available" 灰瓦片。故默认用 **ESRI 世界影像(卫星)**：中国区可靠覆盖到 ~z18，层级足够深。
-    /// 备选地形图：https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}
-    var rasterTileURLTemplate: String = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-    /// 栅格源最高级别：超过则过缩放(overzoom)复用该级瓦片，避免请求到无数据的灰瓦片。
-    var rasterMaxZoom: Int = 18
+    // 在线栅格源/最高级别已并入 MapBaseMode.onlineRaster(OnlineBaseSource)，由 updateOnlineRaster 据此建层。
     var initialCenter = CLLocationCoordinate2D(latitude: 41.80, longitude: 123.43)  // 默认沈阳
     var initialZoom: Double = 11
 
@@ -91,10 +85,15 @@ struct MapLibreView: UIViewRepresentable {
         let coord = context.coordinator
         coord.parent = self                          // 回填最新 parent，使各 update 取到最新入参
         coord.coords = trackCoordinates
-        if coord.lastBaseMode != baseMode {          // 底图切换 → 换 style（didFinishLoading 重建图层）
+        if coord.lastBaseMode != baseMode {          // 底图切换
+            let old = coord.lastBaseMode
             coord.lastBaseMode = baseMode
-            map.styleURL = Self.styleURL(for: baseMode)
+            // 仅当 style 文件确实变化才重载（在线各源共用空 style → 不重载，靠 updateOnlineRaster 换栅格层）
+            if Self.styleURL(for: baseMode).path != Self.styleURL(for: old).path {
+                map.styleURL = Self.styleURL(for: baseMode)
+            }
         }
+        coord.updateOnlineRaster(on: map)            // 在线源切换/重建栅格底图层
         coord.drawTrack(on: map)
         coord.updateKmMarkers(on: map, show: showKmMarkers)
         coord.updateContours(on: map)
@@ -137,7 +136,8 @@ struct MapLibreView: UIViewRepresentable {
     final class Coordinator: NSObject, MLNMapViewDelegate {
         var parent: MapLibreView                 // 最新的 SwiftUI 配置快照（每次 updateUIView 回填）
         var coords: [CLLocationCoordinate2D]     // 当前轨迹坐标（WGS-84），驱动折线/箭头/公里标
-        var lastBaseMode: MapBaseMode = .onlineRaster   // 上次底图模式，与新值比较以判断是否需换 style
+        var lastBaseMode: MapBaseMode = .onlineRaster(.satellite)   // 上次底图模式，与新值比较以判断是否需换 style
+        private var lastOnlineSource: OnlineBaseSource?  // 上次在线栅格源，变化时重建栅格底图层
         private var trackSource: MLNShapeSource? // 轨迹折线数据源；样式重载后置 nil 触发重建
         private var didFit = false               // 是否已把相机框到轨迹范围（fitToTrack 仅做一次）
         private var endpointsAdded = false      // 起终点为标注(跨样式重载存活)，只加一次
@@ -154,20 +154,8 @@ struct MapLibreView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             trackSource = nil          // 样式重载后旧的 track 源/箭头层已不在，置空以重建
             arrowZoomBucket = -100
-            if case .onlineRaster = parent.baseMode,
-               style.source(withIdentifier: "raster-base") == nil {
-                let src = MLNRasterTileSource(
-                    identifier: "raster-base",
-                    tileURLTemplates: [parent.rasterTileURLTemplate],
-                    options: [
-                        .tileSize: 256,
-                        .minimumZoomLevel: 0,
-                        .maximumZoomLevel: parent.rasterMaxZoom
-                    ])
-                style.addSource(src)
-                let layer = MLNRasterStyleLayer(identifier: "raster-base-layer", source: src)
-                style.addLayer(layer)
-            }
+            lastOnlineSource = nil     // 样式重载后栅格底图层已失效，强制重建
+            updateOnlineRaster(on: mapView)   // 在线模式：按当前源加栅格底图层
             // 离线矢量底图：样式 JSON 已含矢量源/层，无需在此添加
             drawTrack(on: mapView)
             updateContours(on: mapView)     // 等高线叠加（样式重载后重建）
@@ -451,6 +439,27 @@ struct MapLibreView: UIViewRepresentable {
                 map.removeAnnotations(kmAnnotations)
                 kmAnnotations = []
             }
+        }
+
+        /// 在线栅格底图层：按当前 onlineRaster 源建/换栅格层；非在线模式则移除。
+        /// 源切换时只换这一层（不重载整个 style），栅格层始终置于最底（叠加都在其上）。
+        func updateOnlineRaster(on map: MLNMapView) {
+            guard let style = map.style else { return }
+            func removeBase() {
+                if let l = style.layer(withIdentifier: "raster-base-layer") { style.removeLayer(l) }
+                if let s = style.source(withIdentifier: "raster-base") { style.removeSource(s) }
+            }
+            guard case .onlineRaster(let src) = parent.baseMode else { lastOnlineSource = nil; removeBase(); return }
+            // 已是该源且层在 → 不动
+            if src == lastOnlineSource, style.source(withIdentifier: "raster-base") != nil { return }
+            removeBase()
+            let source = MLNRasterTileSource(identifier: "raster-base", tileURLTemplates: [src.urlTemplate],
+                options: [.tileSize: 256, .minimumZoomLevel: 0, .maximumZoomLevel: src.maxZoom])
+            style.addSource(source)
+            let layer = MLNRasterStyleLayer(identifier: "raster-base-layer", source: source)
+            if let bottom = style.layers.first { style.insertLayer(layer, below: bottom) }  // 置最底
+            else { style.addLayer(layer) }
+            lastOnlineSource = src
         }
 
         /// 路网层可见性同步（离线矢量样式自带 "road-network" 层，默认隐藏）。

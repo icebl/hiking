@@ -20,7 +20,7 @@ struct TrackDetailView: View {
     @State private var showContours = false          // 是否叠加等高线图层
     @State private var showRoadNetwork = false       // 是否高亮路网图层（仅离线矢量底图可用）
     @State private var toast: String?                // 轻提示文案，非 nil 时浮层显示，1.5s 后自动清空
-    @State private var baseMode: MapBaseMode = .onlineRaster  // 当前底图：在线影像 / 离线矢量
+    @State private var baseMode: MapBaseMode = .onlineRaster(.satellite)  // 当前底图：在线影像/地形/街道 / 离线矢量
     @State private var showLayerSheet = false        // 是否弹出底图选择面板
     @State private var profile: [ElevSample] = []    // 海拔剖面采样（.task 中 buildProfile 生成）
     @State private var selectedProfileIndex: Int?    // 剖面被拖选的采样下标 → 地图高亮该点；nil 为未选
@@ -354,7 +354,10 @@ struct TrackDetailView: View {
         }
         // 底图选择弹窗下放到地图页（触发源在地图控件「图层」），分担 body 类型检查负担
         .confirmationDialog("选择底图", isPresented: $showLayerSheet, titleVisibility: .visible) {
-            Button("在线影像（ESRI，含已缓存离线区域）") { baseMode = .onlineRaster }
+            // 在线源：卫星影像 / 地形图 / 街道图（ESRI）
+            ForEach(OnlineBaseSource.allCases, id: \.self) { src in
+                Button(src == .satellite ? "在线影像（含已缓存离线区域）" : src.label) { baseMode = .onlineRaster(src) }
+            }
             ForEach(OfflineMaps.list().filter { OfflineMaps.isVectorBase($0) }, id: \.self) { url in
                 Button("离线矢量 · \(url.deletingPathExtension().lastPathComponent)") {
                     baseMode = .offlineVector(path: url.path)
