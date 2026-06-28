@@ -74,6 +74,7 @@ struct MapLibreView: UIViewRepresentable {
         map.showsUserHeadingIndicator = true      // 蓝点朝向箭头，随手机方向旋转
         map.logoView.isHidden = true
         map.attributionButton.isHidden = true         // 隐藏版权(i)按钮（遮挡操作；发布前在“关于”补署名）
+        map.compassView.isHidden = true               // 用自定义指北针（旋转时显示、点击回正北）
         map.setCenter(initialCenter, zoomLevel: initialZoom, animated: false)
         if onTap != nil {
             let tap = UITapGestureRecognizer(target: context.coordinator,
@@ -210,11 +211,18 @@ struct MapLibreView: UIViewRepresentable {
 
         // 缩放级别读数回填（任务诊断用）
         func mapViewRegionIsChanging(_ mapView: MLNMapView) {
-            parent.controller?.zoom = mapView.zoomLevel
+            syncCamera(mapView)
         }
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
-            parent.controller?.zoom = mapView.zoomLevel
+            syncCamera(mapView)
             rebuildArrows(on: mapView)      // 缩放变化时按比例尺调整箭头密度
+        }
+
+        /// 回填相机状态到 controller（缩放/旋转角/中心纬度），驱动缩放读数、指北针、比例尺刷新。
+        private func syncCamera(_ mapView: MLNMapView) {
+            parent.controller?.zoom = mapView.zoomLevel
+            parent.controller?.bearing = mapView.direction
+            parent.controller?.centerLat = mapView.centerCoordinate.latitude
         }
 
         /// 绘制/更新轨迹折线 + 起终点圈 + 方向箭头（任务 2.4 / 图7）。

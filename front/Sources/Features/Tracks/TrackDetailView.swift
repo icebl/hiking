@@ -292,6 +292,13 @@ struct TrackDetailView: View {
                             .padding(.bottom, 24)
                     }
                 }
+                // 指北针（旋转时显示、点击回正北）+ 比例尺标尺，避开左侧控件
+                CompassButton(controller: mapCtrl)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.top, 72).padding(.leading, 14)
+                ScaleBarView(controller: mapCtrl)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, 16).padding(.bottom, 12)
             }
             .frame(maxHeight: .infinity)
             // 仅有剖面数据且开关打开时，在地图下方拉出剖面（与底部按钮互斥）

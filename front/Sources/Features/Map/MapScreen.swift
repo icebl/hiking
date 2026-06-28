@@ -145,6 +145,15 @@ struct MapScreen: View {
                     }
                 }.padding(.horizontal, 16).padding(.bottom, 30)
             }
+
+            // 指北针（旋转时显示、点击回正北）：左上，避开返回按钮
+            CompassButton(controller: mapCtrl)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, 60).padding(.leading, 14)
+            // 比例尺标尺：左下，避开底部按钮
+            ScaleBarView(controller: mapCtrl)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(.leading, 16).padding(.bottom, 104)
         }
         .fullScreenCover(isPresented: $showRecording) { RecordingView() }
         // 进入主地图即前台定位（驱动信息条实时经纬度/海拔）；离开页面停止以省电。

@@ -15,6 +15,20 @@ final class MapController: ObservableObject {
     enum LocateState { case off, centered, following }
     @Published var locateState: LocateState = .off
 
+    /// 地图旋转角（度，0=正北；指北针据此显示/旋转）。由 MapLibreView 在地图变动时回填。
+    @Published var bearing: Double = 0
+    /// 中心纬度（比例尺按纬度换算米/点）。由 MapLibreView 回填。
+    @Published var centerLat: Double = 0
+
+    /// 复位到正北（指北针点击）。
+    func resetNorth() { mapView?.setDirection(0, animated: true) }
+
+    /// 当前「米/点」（比例尺用）：按地图中心纬度取 MapLibre 计算值；无地图时 0。
+    func metersPerPoint() -> Double {
+        guard let m = mapView else { return 0 }
+        return m.metersPerPoint(atLatitude: m.centerCoordinate.latitude)
+    }
+
     // 缩放滑块两端对应的 zoom 级别（setZoom 的 0…1 映射区间）
     var minZoom: Double = 1
     var maxZoom: Double = 18
