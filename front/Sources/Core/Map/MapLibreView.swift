@@ -116,8 +116,15 @@ struct MapLibreView: UIViewRepresentable {
     }
 
     /// 最小空 style（version 8），在线栅格源/层在 didFinishLoading 里程序化加入。
+    /// 注入 glyphs：否则等高线海拔数字等 symbol 文字在该底图（无矢量源）上无法渲染。
     private static func blankStyleURL() -> URL {
-        let json = #"{"version":8,"sources":{},"layers":[]}"#
+        var glyphs = ""
+        if let dir = Bundle.main.url(forResource: "glyphs", withExtension: nil) {
+            var base = dir.absoluteString
+            if !base.hasSuffix("/") { base += "/" }
+            glyphs = "\"glyphs\":\"\(base){fontstack}/{range}.pbf\","
+        }
+        let json = "{\"version\":8,\(glyphs)\"sources\":{},\"layers\":[]}"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("blank-style.json")
         try? json.data(using: .utf8)?.write(to: url)
         return url
@@ -515,8 +522,8 @@ struct MapLibreView: UIViewRepresentable {
         /// 等高线叠加层（任务 2.5）：青色细线 + 计曲线(idx==1)加粗；叠在底图之上、轨迹之下。
         func updateContours(on map: MLNMapView) {
             guard let style = map.style else { return }
-            let srcId = "contour-src", lineId = "contour-line", idxId = "contour-index"
-            for id in [idxId, lineId] { if let l = style.layer(withIdentifier: id) { style.removeLayer(l) } }
+            let srcId = "contour-src", lineId = "contour-line", idxId = "contour-index", labelId = "contour-label"
+            for id in [labelId, idxId, lineId] { if let l = style.layer(withIdentifier: id) { style.removeLayer(l) } }
             if let s = style.source(withIdentifier: srcId) { style.removeSource(s) }
             guard parent.showContours, let path = parent.contourPath,
                   let url = URL(string: "pmtiles://\(URL(fileURLWithPath: path).absoluteString)") else { return }
@@ -539,11 +546,27 @@ struct MapLibreView: UIViewRepresentable {
             idx.lineOpacity = NSExpression(forConstantValue: 0.85)
             idx.minimumZoomLevel = 11
 
+            // 海拔数字标注：仅在计曲线(idx==1)沿线标 elev 米数；MapLibre 自动避让→密度随缩放变化
+            let label = MLNSymbolStyleLayer(identifier: labelId, source: src)
+            label.sourceLayerIdentifier = "contour"
+            label.predicate = NSPredicate(format: "idx == 1")
+            label.text = NSExpression(format: "CAST(elev, 'NSString')")   // 整数海拔 → 文字
+            label.textFontNames = NSExpression(forConstantValue: ["OpenSans"])
+            label.textFontSize = NSExpression(forConstantValue: 11)
+            label.textColor = NSExpression(forConstantValue: UIColor(red: 0.13, green: 0.55, blue: 0.53, alpha: 1))
+            label.textHaloColor = NSExpression(forConstantValue: UIColor.white)
+            label.textHaloWidth = NSExpression(forConstantValue: 1.4)
+            label.symbolPlacement = NSExpression(forConstantValue: "line")   // 沿线排布
+            label.textRotationAlignment = NSExpression(forConstantValue: "map")
+            label.symbolSpacing = NSExpression(forConstantValue: 200)        // 同一条线上每隔约 200pt 重复一个数字
+            label.minimumZoomLevel = 12.5
+
             if let track = style.layer(withIdentifier: "track-line") {   // 等高线在红轨迹之下
                 style.insertLayer(line, below: track)
                 style.insertLayer(idx, below: track)
+                style.insertLayer(label, below: track)
             } else {
-                style.addLayer(line); style.addLayer(idx)
+                style.addLayer(line); style.addLayer(idx); style.addLayer(label)
             }
         }
 
