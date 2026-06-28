@@ -39,6 +39,7 @@ struct TrackDetailView: View {
     @State private var showKindDialog = false           // 是否弹出类型选择面板
     @State private var viewerImage: UIImage?            // 正在全屏查看的航点照片（nil=不显示）
     @State private var showTrim = false                 // 裁剪首尾页
+    @AppStorage("highContrastMap") private var highContrast = false  // 高对比地图文字
 
     // 工具箱（同地图页）：取点 / 测距 / 面积 / 距离雷达
     enum MeasureMode { case none, distance, area }
@@ -320,7 +321,7 @@ struct TrackDetailView: View {
                         Spacer()
                         Text(toast).font(.caption).foregroundColor(.white)
                             .padding(.vertical, 8).padding(.horizontal, 14)
-                            .background(Color.black.opacity(0.75)).cornerRadius(10)
+                            .background(AppColor.mapScrim(highContrast)).cornerRadius(10)
                             .padding(.bottom, 24)
                     }
                 }
@@ -397,7 +398,7 @@ struct TrackDetailView: View {
         }
         .font(.subheadline)
         .padding(.vertical, 6).padding(.leading, 14).padding(.trailing, 6)
-        .background(Color.black.opacity(0.78)).cornerRadius(12)
+        .background(AppColor.mapScrim(highContrast)).cornerRadius(12)
     }
 
     /// 取点经纬度读数：经纬度 + 海拔 + 复制 + 关闭（X 退出取点模式）。
@@ -418,7 +419,7 @@ struct TrackDetailView: View {
             }.padding(.leading, 12)
         }
         .padding(.vertical, 10).padding(.horizontal, 14)
-        .background(Color.black.opacity(0.78)).cornerRadius(12)
+        .background(AppColor.mapScrim(highContrast)).cornerRadius(12)
     }
 
     /// 异步查点击点海拔（在线 DEM）。

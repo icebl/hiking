@@ -17,6 +17,7 @@ struct SettingsView: View {
     @AppStorage("coordFormat") private var coordFormat = "度 dd.ddddd°"
     @AppStorage("powerSaveGPS") private var powerSaveGPS = false
     @AppStorage("diagnostics") private var diagnostics = false
+    @AppStorage("highContrastMap") private var highContrastMap = false
 
     // 草稿（界面只改这些，仅「确认」后写回上面持久化项）；初值会在 onAppear 由 loadDraft 覆盖
     @State private var dSample = 5         // 采样间隔(秒) 1…30
@@ -32,6 +33,7 @@ struct SettingsView: View {
     @State private var dCoord = "度 dd.ddddd°"   // 坐标格式
     @State private var dPowerSave = false  // 省电定位（降精度+加大位移过滤）
     @State private var dDiag = false       // 诊断日志（电量/后台采样）
+    @State private var dHighContrast = false // 高对比地图文字
     @State private var justSaved = false   // 刚点过确认（用于按钮显示「已保存 ✓」）
 
     var body: some View {
@@ -58,6 +60,7 @@ struct SettingsView: View {
                     Text("度分秒 DMS").tag("度分秒 DMS")
                     Text("UTM").tag("UTM")
                 }
+                Toggle("高对比地图文字（强光更清晰）", isOn: $dHighContrast)
                 LabeledContent("账号 · 三期", value: "未登录")
                 Toggle("诊断日志（电量/后台采样）", isOn: $dDiag)
             }
@@ -83,7 +86,7 @@ struct SettingsView: View {
         || dBaro != useBarometer || dOffRoute != offRouteThreshold || dWpApproach != waypointApproach
         || dVoice != voiceAlert
         || dVoiceInt != voiceInterval || dRecNav != recordWhileNav || dCoord != coordFormat
-        || dPowerSave != powerSaveGPS || dDiag != diagnostics
+        || dPowerSave != powerSaveGPS || dDiag != diagnostics || dHighContrast != highContrastMap
     }
 
     /// 进入页面时把持久化值灌入草稿，保证界面初始展示与已保存设置一致。
@@ -93,7 +96,7 @@ struct SettingsView: View {
         dOffRoute = offRouteThreshold; dWpApproach = waypointApproach
         dVoice = voiceAlert; dVoiceInt = voiceInterval
         dRecNav = recordWhileNav; dCoord = coordFormat
-        dPowerSave = powerSaveGPS; dDiag = diagnostics
+        dPowerSave = powerSaveGPS; dDiag = diagnostics; dHighContrast = highContrastMap
     }
 
     /// 点「确认修改」时把草稿写回 @AppStorage 真正生效，并标记 justSaved 用于按钮反馈。
@@ -103,7 +106,7 @@ struct SettingsView: View {
         offRouteThreshold = dOffRoute; waypointApproach = dWpApproach
         voiceAlert = dVoice; voiceInterval = dVoiceInt
         recordWhileNav = dRecNav; coordFormat = dCoord
-        powerSaveGPS = dPowerSave; diagnostics = dDiag
+        powerSaveGPS = dPowerSave; diagnostics = dDiag; highContrastMap = dHighContrast
         justSaved = true
     }
 }

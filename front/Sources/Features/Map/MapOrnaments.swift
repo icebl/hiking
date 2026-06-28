@@ -4,6 +4,7 @@ import SwiftUI
 /// 依赖 controller.zoom / centerLat（@Published）触发重算。
 struct ScaleBarView: View {
     @ObservedObject var controller: MapController
+    @AppStorage("highContrastMap") private var highContrast = false   // 高对比：标签加深色底
     private let maxWidth: CGFloat = 90   // 标尺最大宽度（点），实际取不超过它的整数距离
 
     var body: some View {
@@ -17,6 +18,9 @@ struct ScaleBarView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.label(meters))
                         .font(.system(size: 11, weight: .semibold)).foregroundColor(.white)
+                        .padding(.horizontal, highContrast ? 6 : 0).padding(.vertical, highContrast ? 2 : 0)
+                        .background(highContrast ? AppColor.mapScrim(true) : Color.clear)
+                        .cornerRadius(6)
                     // 标尺：底横线 + 两端竖线
                     ZStack(alignment: .bottom) {
                         HStack(spacing: 0) {

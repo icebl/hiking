@@ -42,4 +42,7 @@ enum AppSettings {
     static var powerSaveGPS: Bool {               // 省电定位（降精度+加大位移过滤），默认关
         d.object(forKey: "powerSaveGPS") != nil ? d.bool(forKey: "powerSaveGPS") : false
     }
+    static var highContrastMap: Bool {            // 高对比地图文字（强光下浮层更深更粗），默认关
+        d.object(forKey: "highContrastMap") != nil ? d.bool(forKey: "highContrastMap") : false
+    }
 }

@@ -19,6 +19,11 @@ enum AppRadius { static let card: CGFloat = 16; static let button: CGFloat = 14;
 /// 间距 Token：s/m/l/xl 四档统一布局留白。单位 pt。
 enum AppSpacing { static let s: CGFloat = 8, m: CGFloat = 12, l: CGFloat = 16, xl: CGFloat = 24 }
 
+extension AppColor {
+    /// 地图浮层底色：高对比模式更深(0.9)，户外强光下文字更清晰；常态 0.72。
+    static func mapScrim(_ highContrast: Bool) -> Color { Color.black.opacity(highContrast ? 0.9 : 0.72) }
+}
+
 extension Color {
     /// 用 0xRRGGBB 整型十六进制构造 sRGB 不透明颜色（便于直接写设计稿色值）。
     init(hex: UInt) {

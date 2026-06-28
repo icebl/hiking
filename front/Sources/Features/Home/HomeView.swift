@@ -20,6 +20,13 @@ struct HomeView: View {
                     }
                     .padding().background(Color.white).cornerRadius(AppRadius.card)
 
+                    // 本月零数据：鼓励出发
+                    if summary.count == 0 {
+                        Text("本月还没出发，去记录第一条轨迹吧 🥾")
+                            .font(.caption).foregroundColor(AppColor.ink2)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+
                     Text("快捷").font(.caption).foregroundColor(AppColor.ink2)
                     HStack(spacing: 12) {
                         Button { showRecording = true } label: {

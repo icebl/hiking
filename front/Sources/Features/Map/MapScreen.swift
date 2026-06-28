@@ -20,6 +20,7 @@ struct MapScreen: View {
     @State private var probeText: String?                   // 长按测距：距我/方位读数
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1），1=最大
     @State private var zoomDragging = false     // 缩放滑块拖动中（控制左侧数值气泡显隐）
+    @AppStorage("highContrastMap") private var highContrast = false  // 高对比地图文字（强光可读性）
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
     @State private var showRoadNetwork = false   // 路网开关（仅离线矢量底图有效）
@@ -131,7 +132,7 @@ struct MapScreen: View {
                     .font(.caption)
                     .padding(.vertical, 10).padding(.horizontal, 14)
                     .frame(maxWidth: .infinity)
-                    .background(Color.black.opacity(0.72))
+                    .background(AppColor.mapScrim(highContrast))
                 }
                 .padding(.bottom, 96)
             }
@@ -262,7 +263,7 @@ struct MapScreen: View {
             .frame(maxHeight: 132)   // 约 4~5 条，超出滚动
         }
         .padding(.vertical, 10).padding(.horizontal, 14)
-        .background(Color.black.opacity(0.78)).cornerRadius(12)
+        .background(AppColor.mapScrim(highContrast)).cornerRadius(12)
     }
 
     /// 长按测距读数条：「距我 距离 · 方位 …」+ 关闭（清除高亮）。
@@ -276,7 +277,7 @@ struct MapScreen: View {
             }
         }
         .padding(.vertical, 10).padding(.horizontal, 14)
-        .background(Color.black.opacity(0.78)).cornerRadius(12)
+        .background(AppColor.mapScrim(highContrast)).cornerRadius(12)
     }
 
     /// 长按某点：算该点距当前定位的直线距离与方位，显示读数 + 地图高亮。
@@ -361,7 +362,7 @@ struct MapScreen: View {
         }
         .font(.subheadline)
         .padding(.vertical, 6).padding(.leading, 14).padding(.trailing, 6)
-        .background(Color.black.opacity(0.78)).cornerRadius(12)
+        .background(AppColor.mapScrim(highContrast)).cornerRadius(12)
     }
 
     /// 顶部信息条：坐标系标识 + 示例经纬度/海拔（当前为占位静态文案，待接入实时定位）。
@@ -377,9 +378,9 @@ struct MapScreen: View {
             return Text(" 定位中…").foregroundColor(.white)
         }()
         return (prefix + body)
-            .font(.system(size: 11.5, weight: .medium))
+            .font(.system(size: 11.5, weight: highContrast ? .bold : .medium))   // 高对比加粗
             .padding(.vertical, 6).padding(.horizontal, 14)
-            .background(Color.black.opacity(0.72)).cornerRadius(12)
+            .background(AppColor.mapScrim(highContrast)).cornerRadius(12)
     }
 
     /// 缩放 +/- 竖排药丸

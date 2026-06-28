@@ -10,6 +10,7 @@ struct RecordingView: View {
     @State private var showMarkDialog = false              // 打点类型选择弹窗
     @State private var showCamera = false                  // 拍照打点：相机选择器
     @State private var markToast: String?                  // 打点结果轻提示文案（短暂显示后自动消失）
+    @State private var endError: String?                   // 结束失败提示（如未采集到轨迹点）
 
     var body: some View {
         VStack(spacing: 0) {
@@ -69,7 +70,7 @@ struct RecordingView: View {
                     Button { ctrl.state == .paused ? ctrl.resume() : ctrl.pause() } label: {
                         label(ctrl.state == .paused ? "继续" : "暂停", filled: false)
                     }
-                    HoldToEndButton(title: "长按 3 秒结束") { _ = try? ctrl.finish(); dismiss() }
+                    HoldToEndButton(title: "长按 3 秒结束") { endRecording() }
                 }
             }
             .padding().background(Color.white)
@@ -93,6 +94,10 @@ struct RecordingView: View {
         } message: {
             Text("记录轨迹需要定位权限。请在 设置 → 路迹 → 位置 中允许（建议「始终」以便锁屏后台记录）。")
         }
+        // 结束失败（如未采集到轨迹点）：明确提示而非静默退出
+        .alert("未保存", isPresented: Binding(get: { endError != nil }, set: { if !$0 { endError = nil } })) {
+            Button("好") { dismiss() }
+        } message: { Text(endError ?? "") }
     }
 
     /// 进入页面后的启动流程：先确认定位权限，再按 resumeSessionId 决定续记或全新开始。
@@ -101,6 +106,12 @@ struct RecordingView: View {
         if loc.denied { showPermAlert = true; return }
         loc.requestWhenInUse()   // 未决定→系统弹窗；已授权→无副作用
         if let resumeSessionId { ctrl.resume(sessionId: resumeSessionId) } else { ctrl.start() }
+    }
+
+    /// 结束记录：成功则关闭；失败（如未采集到轨迹点）弹提示，避免静默退出。
+    private func endRecording() {
+        do { _ = try ctrl.finish(); dismiss() }
+        catch { endError = error.localizedDescription }
     }
 
     /// 打点：在当前位置落标注点，给一次轻提示。拍照类型先开相机，拍到再落点（见 capturePhoto）。
