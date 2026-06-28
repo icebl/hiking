@@ -11,6 +11,7 @@ struct RecordingView: View {
     @State private var showCamera = false                  // 拍照打点：相机选择器
     @State private var markToast: String?                  // 打点结果轻提示文案（短暂显示后自动消失）
     @State private var endError: String?                   // 结束失败提示（如未采集到轨迹点）
+    @State private var showBig = false                     // 大字模式：全屏深色大读数面板（强光/骑行）
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,14 +57,23 @@ struct RecordingView: View {
                     Spacer(); metric(eleText, "海拔 m", AppColor.ink)
                 }
 
-                Button { showMarkDialog = true } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "mappin.and.ellipse")
-                        Text(ctrl.waypointCount > 0 ? "打点 · 已标 \(ctrl.waypointCount)" : "打点")
+                HStack(spacing: 10) {
+                    Button { showMarkDialog = true } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "mappin.and.ellipse")
+                            Text(ctrl.waypointCount > 0 ? "打点 · 已标 \(ctrl.waypointCount)" : "打点")
+                        }
+                        .fontWeight(.semibold).foregroundColor(AppColor.info)
+                        .frame(maxWidth: .infinity).frame(height: 46)
+                        .overlay(RoundedRectangle(cornerRadius: AppRadius.button).stroke(AppColor.info.opacity(0.5)))
                     }
-                    .fontWeight(.semibold).foregroundColor(AppColor.info)
-                    .frame(maxWidth: .infinity).frame(height: 46)
-                    .overlay(RoundedRectangle(cornerRadius: AppRadius.button).stroke(AppColor.info.opacity(0.5)))
+                    // 大字模式：进入全屏深色大读数面板（强光/骑行场景）
+                    Button { showBig = true } label: {
+                        Image(systemName: "textformat.size")
+                            .font(.system(size: 18, weight: .semibold)).foregroundColor(AppColor.info)
+                            .frame(width: 52, height: 46)
+                            .overlay(RoundedRectangle(cornerRadius: AppRadius.button).stroke(AppColor.info.opacity(0.5)))
+                    }
                 }
 
                 HStack(spacing: 12) {
@@ -78,6 +88,12 @@ struct RecordingView: View {
         }
         .ignoresSafeArea(edges: .top)
         .onAppear { startFlow() }
+        // 大字模式：全屏覆盖，共用同一 ctrl（数据实时）；退出仅关面板，长按结束走 endRecording
+        .fullScreenCover(isPresented: $showBig) {
+            BigGaugeView(ctrl: ctrl,
+                         onExit: { showBig = false },
+                         onEnd: { showBig = false; endRecording() })
+        }
         .confirmationDialog("标注点类型", isPresented: $showMarkDialog, titleVisibility: .visible) {
             ForEach(WaypointKind.allOrdered, id: \.self) { k in
                 Button(k.label) { mark(k) }

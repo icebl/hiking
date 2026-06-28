@@ -88,8 +88,12 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension: [kmz]
               public.mime-type: [application/vnd.google-earth.kmz]
+        # —— 朝向：声明可用朝向（含横屏），但默认锁竖；是否真旋由 AppDelegate.orientationMask 控制 ——
+        # 仅记录页「大字模式」会临时把 mask 放开为横屏，其它页保持竖屏（见 AppDelegate.swift）。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
 
   # 单元测试 target（纯逻辑：Measure / CoordFormatter / NavigationEngine / 统计）。
   # 仅在 test 动作编译运行；App 的 `xcodebuild build` 不会触碰它（见下方 schemes），故不影响 CI。
