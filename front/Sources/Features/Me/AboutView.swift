@@ -26,11 +26,14 @@ struct AboutView: View {
                 attribution("字体", "Open Sans（Apache License 2.0）")
             }
 
-            // 开源组件
+            // 开源组件（点进看许可证全文）
             Section("开源组件") {
                 attribution("MapLibre Native", "BSD-2-Clause")
                 attribution("GRDB.swift", "MIT License")
                 attribution("CoreGPX", "MIT License")
+                NavigationLink { LicensesView() } label: {
+                    Label("查看许可证全文", systemImage: "doc.text")
+                }
             }
 
             // 隐私说明 + 诊断日志入口
