@@ -16,6 +16,8 @@ struct MapScreen: View {
     @State private var tappedCoord: CLLocationCoordinate2D? // 点击点坐标，用于地图高亮标记
     @State private var tappedCopied = false                 // 复制经纬度后短暂反馈
     @State private var pickingCoord = false                 // 取点模式（工具箱启用）：点地图才取经纬度
+    @State private var probeCoord: CLLocationCoordinate2D?   // 长按测距：目标点（地图高亮）
+    @State private var probeText: String?                   // 长按测距：距我/方位读数
     @State private var zoomLevel: Double = 0.5  // 缩放滑块位置（0…1），1=最大
     @State private var showKm = false           // 公里标开关
     @State private var showContours = false      // 等高线开关
@@ -38,7 +40,7 @@ struct MapScreen: View {
             // 底图视图：把上面各开关/状态下传给原生地图渲染
             MapLibreView(controller: mapCtrl, baseMode: baseMode, showKmMarkers: showKm,
                          showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
-                         highlightCoordinate: tappedCoord,   // 点击点的高亮标记（橙点，区别于航点）
+                         highlightCoordinate: probeCoord ?? tappedCoord,   // 长按测距点优先，其次取点高亮（橙点）
                          measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
                          showRoadNetwork: showRoadNetwork, overlays: overlayItems.map(\.coords),
                          onTap: { c in
@@ -49,7 +51,8 @@ struct MapScreen: View {
                                  tappedCoord = c
                                  fetchTappedElevation(c)
                              }
-                         })
+                         },
+                         onLongPress: { c in probeDistance(c) })   // 长按：该点距我直线距离/方位
                 .ignoresSafeArea()
 
             // 信息条：靠上居中（WGS84 浅绿高亮）；取点模式且未取点时提示点击地图
@@ -136,6 +139,7 @@ struct MapScreen: View {
             VStack {
                 Spacer()
                 if measure != .none { measureBar.padding(.horizontal, 16).padding(.bottom, 8) }
+                if probeText != nil { probeBar.padding(.horizontal, 16).padding(.bottom, 8) }
                 if !overlayItems.isEmpty { overlayLegend.padding(.horizontal, 16).padding(.bottom, 8) }
                 HStack(spacing: 12) {
                     Button { showRecording = true } label: { cta("记录", "record.circle", .white, AppColor.ink) }
@@ -258,6 +262,30 @@ struct MapScreen: View {
         }
         .padding(.vertical, 10).padding(.horizontal, 14)
         .background(Color.black.opacity(0.78)).cornerRadius(12)
+    }
+
+    /// 长按测距读数条：「距我 距离 · 方位 …」+ 关闭（清除高亮）。
+    private var probeBar: some View {
+        HStack {
+            (Text("距我 ").foregroundColor(.white)
+             + Text(probeText ?? "").foregroundColor(Color(hex: 0x7EE0A6)).bold()).font(.caption)
+            Spacer()
+            Button { probeText = nil; probeCoord = nil } label: {
+                Image(systemName: "xmark").foregroundColor(.white.opacity(0.8))
+            }
+        }
+        .padding(.vertical, 10).padding(.horizontal, 14)
+        .background(Color.black.opacity(0.78)).cornerRadius(12)
+    }
+
+    /// 长按某点：算该点距当前定位的直线距离与方位，显示读数 + 地图高亮。
+    private func probeDistance(_ c: CLLocationCoordinate2D) {
+        probeCoord = c
+        guard let me = loc.location?.coordinate else { probeText = "定位未就绪"; return }
+        let d = CLLocation(latitude: me.latitude, longitude: me.longitude)
+            .distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude))
+        let brg = Measure.bearing(from: me, to: c)
+        probeText = "\(Measure.distanceText(d)) · 方位 \(Measure.bearingText(brg))"
     }
 
     /// 当前是否为离线矢量底图（路网/标注仅此模式有效）。

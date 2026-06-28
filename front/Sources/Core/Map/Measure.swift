@@ -43,6 +43,22 @@ enum Measure {
         return String(format: "%.2f km²", m2 / 1_000_000)
     }
 
+    /// A→B 方位角（度，0=正北，顺时针 0…360）。
+    static func bearing(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> Double {
+        let lat1 = a.latitude * .pi / 180, lat2 = b.latitude * .pi / 180
+        let dLon = (b.longitude - a.longitude) * .pi / 180
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+    }
+    /// 方位角 → 八方位中文（北/东北/东/…）。
+    static func compass8(_ deg: Double) -> String {
+        let dirs = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"]
+        return dirs[Int((deg + 22.5) / 45) % 8]
+    }
+    /// 方位文本：如 "73° 东"。
+    static func bearingText(_ deg: Double) -> String { String(format: "%.0f° %@", deg, compass8(deg)) }
+
     /// 由中心点按方位角(度)+距离(米)求目标点（球面正解，用于画半径圆等）。
     static func destination(_ c: CLLocationCoordinate2D, distance d: Double, bearingDeg b: Double) -> CLLocationCoordinate2D {
         let R = 6_378_137.0   // WGS84 赤道半径（米）

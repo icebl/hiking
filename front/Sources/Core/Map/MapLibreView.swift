@@ -54,6 +54,8 @@ struct MapLibreView: UIViewRepresentable {
     // 在线栅格源/最高级别已并入 MapBaseMode.onlineRaster(OnlineBaseSource)，由 updateOnlineRaster 据此建层。
     var initialCenter = CLLocationCoordinate2D(latitude: 41.80, longitude: 123.43)  // 默认沈阳
     var initialZoom: Double = 11
+    /// 长按地图回调（返回长按点坐标，用于"该点距我直线距离/方位"）。新参数一律追加到末尾。
+    var onLongPress: ((CLLocationCoordinate2D) -> Void)? = nil
 
     /// 创建 Coordinator（持有可变状态、充当 MLNMapView 的 delegate）。
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -74,6 +76,11 @@ struct MapLibreView: UIViewRepresentable {
             let tap = UITapGestureRecognizer(target: context.coordinator,
                                              action: #selector(Coordinator.handleTap(_:)))
             map.addGestureRecognizer(tap)
+        }
+        if onLongPress != nil {
+            let lp = UILongPressGestureRecognizer(target: context.coordinator,
+                                                  action: #selector(Coordinator.handleLongPress(_:)))
+            map.addGestureRecognizer(lp)
         }
         controller?.mapView = map
         return map
@@ -195,6 +202,13 @@ struct MapLibreView: UIViewRepresentable {
             guard let map = g.view as? MLNMapView else { return }
             let coord = map.convert(g.location(in: map), toCoordinateFrom: map)
             parent.onTap?(coord)
+        }
+
+        // 长按地图：仅在手势开始时回调一次该点坐标（距我距离/方位）
+        @objc func handleLongPress(_ g: UILongPressGestureRecognizer) {
+            guard g.state == .began, let map = g.view as? MLNMapView else { return }
+            let coord = map.convert(g.location(in: map), toCoordinateFrom: map)
+            parent.onLongPress?(coord)
         }
 
         // 缩放级别读数回填（任务诊断用）
