@@ -90,3 +90,32 @@ targets:
               public.mime-type: [application/vnd.google-earth.kmz]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+
+  # 单元测试 target（纯逻辑：Measure / CoordFormatter / NavigationEngine / 统计）。
+  # 仅在 test 动作编译运行；App 的 `xcodebuild build` 不会触碰它（见下方 schemes），故不影响 CI。
+  HikingTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Hiking
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hiking.app.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+# 显式定义 Hiking scheme：build 动作只含 App，test 动作含单测。
+# 这样 CI 的 `xcodebuild -scheme Hiking build` 只编译 App，不编译/不跑测试 → 零额外开销。
+schemes:
+  Hiking:
+    build:
+      targets:
+        Hiking: all
+    test:
+      targets:
+        - HikingTests
+    run: {}
+    profile: {}
+    analyze: {}
+    archive: {}
