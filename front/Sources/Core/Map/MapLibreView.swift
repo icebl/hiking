@@ -567,7 +567,7 @@ struct MapLibreView: UIViewRepresentable {
             label.symbolPlacement = NSExpression(forConstantValue: "line")   // 沿线排布
             label.textRotationAlignment = NSExpression(forConstantValue: "map")
             label.symbolSpacing = NSExpression(forConstantValue: 200)        // 同一条线上每隔约 200pt 重复一个数字
-            label.minimumZoomLevel = 12.5
+            label.minimumZoomLevel = 11   // z11 起显示（与计曲线同级；低 zoom 靠避让只留主要等高线数字）
 
             if let track = style.layer(withIdentifier: "track-line") {   // 等高线在红轨迹之下
                 style.insertLayer(line, below: track)

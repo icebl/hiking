@@ -21,6 +21,9 @@ tools/*.gpkg
 tools/*.pmtiles
 tools/*.osm.pbf
 
+# UI
+UI/Real-test
+UI/UI reference
 
 # 依赖缓存
 **/.swiftpm

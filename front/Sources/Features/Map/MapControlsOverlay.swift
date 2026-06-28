@@ -16,6 +16,8 @@ struct MapControlsOverlay: View {
     var hasWaypoints: Bool = false
     @Binding var showWaypoints: Bool
     var onPlaceholder: (String) -> Void = { _ in }  // 占位功能点击回调（如未开放的工具）
+    var toolsActive: Bool = false                   // 工具箱是否激活（测距/面积/雷达/取点中），高亮按钮
+    var onTools: () -> Void = {}                    // 点「工具」回调（打开工具箱）
     var onLayers: () -> Void = {}                   // 点「图层」回调（切底图，由父视图实现）
     var onContours: () -> Void = {}                 // 点「等高线」回调
     var onProfile: () -> Void = {}                  // 点「剖面」回调（展开/收起剖面面板）
@@ -27,7 +29,7 @@ struct MapControlsOverlay: View {
                 Spacer()
                 VStack(spacing: 14) {
                     ctrl("square.3.stack.3d", "图层") { onLayers() }
-                    ctrl("wrench.and.screwdriver", "工具") { onPlaceholder("工具箱后续开放") }
+                    ctrl("wrench.and.screwdriver", "工具", active: toolsActive) { onTools() }
                     Spacer()
                     zoomGroup
                     zoomSlider
@@ -90,8 +92,8 @@ struct MapControlsOverlay: View {
             ZStack {
                 Circle().fill(AppColor.primary).frame(width: 30, height: 30)
                     .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
-                Text(String(format: "%.0f", controller.zoom))
-                    .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                Text(String(format: "%.1f", controller.zoom))
+                    .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
             }
             .offset(y: CGFloat(1 - min(1, max(0, frac))) * 83)
         }

@@ -375,8 +375,8 @@ struct MapScreen: View {
             ZStack {
                 Circle().fill(AppColor.primary).frame(width: 30, height: 30)
                     .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
-                Text(String(format: "%.0f", mapCtrl.zoom))
-                    .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                Text(String(format: "%.1f", mapCtrl.zoom))
+                    .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
             }
             .offset(y: CGFloat(1 - zoomLevel) * 83)   // zoomLevel=1 时圆点在顶端，越大越上
         }

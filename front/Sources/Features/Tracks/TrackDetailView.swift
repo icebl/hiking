@@ -25,7 +25,7 @@ struct TrackDetailView: View {
     @State private var profile: [ElevSample] = []    // 海拔剖面采样（.task 中 buildProfile 生成）
     @State private var selectedProfileIndex: Int?    // 剖面被拖选的采样下标 → 地图高亮该点；nil 为未选
     @State private var showProfile = false           // 默认不展开海拔剖面
-    @State private var showWaypoints = true          // 轨迹上标记点显隐
+    @State private var showWaypoints = false         // 轨迹上标记点显隐（默认关）
     @State private var showRename = false            // 是否弹出重命名 alert
     @State private var renameText = ""               // 重命名输入框绑定值
     @State private var showDeleteConfirm = false     // 是否弹出删除确认
@@ -39,6 +39,18 @@ struct TrackDetailView: View {
     @State private var showKindDialog = false           // 是否弹出类型选择面板
     @State private var viewerImage: UIImage?            // 正在全屏查看的航点照片（nil=不显示）
     @State private var showTrim = false                 // 裁剪首尾页
+
+    // 工具箱（同地图页）：取点 / 测距 / 面积 / 距离雷达
+    enum MeasureMode { case none, distance, area }
+    @State private var measure: MeasureMode = .none
+    @State private var measurePoints: [CLLocationCoordinate2D] = []
+    @State private var showRadar = false
+    @State private var pickingCoord = false             // 取点模式
+    @State private var showToolSheet = false
+    @State private var tapped: String?                  // 取点经纬度读数
+    @State private var tappedCoord: CLLocationCoordinate2D?
+    @State private var tappedEle = "海拔 查询中…"
+    @State private var tappedCopied = false
 
     // body 拆分：导航栏修饰留在 body，内容与各类弹窗下放到 content/子视图，
     // 避免单个表达式过大触发「类型检查超时」。
@@ -277,13 +289,25 @@ struct TrackDetailView: View {
                 MapLibreView(controller: mapCtrl, baseMode: baseMode, trackCoordinates: coords,
                              showsUserLocation: true, fitToTrack: true, showKmMarkers: showKm,
                              showContours: showContours, contourPath: OfflineMaps.contourPack()?.path,
-                             highlightCoordinate: highlightCoord,
+                             highlightCoordinate: tappedCoord ?? highlightCoord,   // 取点高亮优先于剖面高亮
+                             measureCoordinates: measurePoints, measureIsArea: measure == .area, showRadar: showRadar,
                              showRoadNetwork: showRoadNetwork,
-                             waypoints: shownWaypoints, centerOn: centerCoord)
+                             waypoints: shownWaypoints, centerOn: centerCoord,
+                             onTap: { c in
+                                 // 测距/面积→落点；取点→经纬度+海拔+高亮；否则忽略
+                                 if measure != .none { measurePoints.append(c) }
+                                 else if pickingCoord {
+                                     tapped = CoordFormatter.string(c, format: AppSettings.coordFormat)
+                                     tappedCoord = c
+                                     fetchTappedElevation(c)
+                                 }
+                             })
                 MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
                                    hasProfile: !profile.isEmpty, showProfile: showProfile,
                                    isVectorBase: isVectorBase, showRoadNetwork: $showRoadNetwork,
                                    hasWaypoints: !waypoints.isEmpty, showWaypoints: $showWaypoints,
+                                   toolsActive: measure != .none || showRadar || pickingCoord,
+                                   onTools: { showToolSheet = true },
                                    onPlaceholder: showToast, onLayers: { showLayerSheet = true },
                                    onContours: { toggleContours() },
                                    onProfile: {
@@ -307,6 +331,19 @@ struct TrackDetailView: View {
                 ScaleBarView(controller: mapCtrl)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(.leading, 16).padding(.bottom, 12)
+                // 取点模式提示（未取点时）
+                if pickingCoord && tapped == nil {
+                    Text("点击地图取经纬度").font(.caption).foregroundColor(.white)
+                        .padding(.vertical, 5).padding(.horizontal, 12)
+                        .background(AppColor.primary.opacity(0.9)).cornerRadius(10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).padding(.top, 8)
+                }
+                // 工具箱：测量条 / 取点读数（底部）
+                VStack(spacing: 8) {
+                    Spacer()
+                    if measure != .none { measureBar }
+                    if tapped != nil { tappedReadout }
+                }.padding(.horizontal, 12).padding(.bottom, 12)
             }
             .frame(maxHeight: .infinity)
             // 仅有剖面数据且开关打开时，在地图下方拉出剖面（与底部按钮互斥）
@@ -327,7 +364,78 @@ struct TrackDetailView: View {
         } message: {
             Text("卫星离线：在「在线影像」底图下，已下载区域断网自动显示")
         }
+        // 工具箱（同地图页）：取点/测距/面积/距离雷达互斥切换
+        .confirmationDialog("工具箱", isPresented: $showToolSheet, titleVisibility: .visible) {
+            Button("取点（经纬度）") { measure = .none; measurePoints = []; clearTapped(); pickingCoord = true }
+            Button("测距") { measure = .distance; measurePoints = []; clearTapped(); pickingCoord = false }
+            Button("面积") { measure = .area; measurePoints = []; clearTapped(); pickingCoord = false }
+            Button(showRadar ? "关闭距离雷达" : "距离雷达") { showRadar.toggle() }
+            if measure != .none { Button("退出测量", role: .destructive) { measure = .none; measurePoints = [] } }
+            if pickingCoord { Button("退出取点", role: .destructive) { exitPicking() } }
+            Button("取消", role: .cancel) {}
+        } message: { Text("取点：点地图取经纬度；测距/面积：连点测量；距离雷达：以定位为中心同心圈") }
     }
+
+    /// 测量结果条（测距/面积）：读数 + 后退/清除/退出。
+    private var measureBar: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(measure == .area ? "面积" : "测距").font(.caption).foregroundColor(.white.opacity(0.8))
+                Text(measure == .area ? Measure.areaText(Measure.polygonArea(measurePoints))
+                                      : Measure.distanceText(Measure.totalDistance(measurePoints)))
+                    .font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+            }
+            Spacer()
+            Button { if !measurePoints.isEmpty { measurePoints.removeLast() } } label: {
+                Image(systemName: "arrow.uturn.backward").foregroundColor(.white).frame(width: 40, height: 40)
+            }.disabled(measurePoints.isEmpty)
+            Button { measurePoints = [] } label: { Text("清除").foregroundColor(.white).frame(width: 48, height: 40) }
+            Button { measure = .none; measurePoints = [] } label: { Text("退出").foregroundColor(AppColor.recording).frame(width: 48, height: 40) }
+        }
+        .font(.subheadline)
+        .padding(.vertical, 6).padding(.leading, 14).padding(.trailing, 6)
+        .background(Color.black.opacity(0.78)).cornerRadius(12)
+    }
+
+    /// 取点经纬度读数：经纬度 + 海拔 + 复制 + 关闭（X 退出取点模式）。
+    private var tappedReadout: some View {
+        HStack {
+            (Text("点 ").foregroundColor(.white)
+             + Text(tapped ?? "").foregroundColor(Color(hex: 0x7EE0A6)).bold()
+             + Text(" · \(tappedEle)").foregroundColor(.white)).font(.caption)
+            Spacer()
+            Button { copyTapped() } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: tappedCopied ? "checkmark" : "doc.on.doc")
+                    Text(tappedCopied ? "已复制" : "复制")
+                }.font(.caption).foregroundColor(tappedCopied ? Color(hex: 0x7EE0A6) : .white)
+            }
+            Button { exitPicking() } label: {
+                Image(systemName: "xmark").foregroundColor(.white.opacity(0.8))
+            }.padding(.leading, 12)
+        }
+        .padding(.vertical, 10).padding(.horizontal, 14)
+        .background(Color.black.opacity(0.78)).cornerRadius(12)
+    }
+
+    /// 异步查点击点海拔（在线 DEM）。
+    private func fetchTappedElevation(_ c: CLLocationCoordinate2D) {
+        tappedEle = "海拔 查询中…"
+        Task { @MainActor in
+            if let e = await ElevationService.shared.elevation(lat: c.latitude, lon: c.longitude) {
+                tappedEle = String(format: "海拔 %.0f m", e)
+            } else { tappedEle = "海拔 未知" }
+        }
+    }
+    /// 复制经纬度（仅经纬度）到剪贴板。
+    private func copyTapped() {
+        guard let tapped else { return }
+        UIPasteboard.general.string = tapped
+        withAnimation { tappedCopied = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { withAnimation { tappedCopied = false } }
+    }
+    private func clearTapped() { tapped = nil; tappedCoord = nil }
+    private func exitPicking() { clearTapped(); pickingCoord = false }
 
     private var statsList: some View {
         List {
