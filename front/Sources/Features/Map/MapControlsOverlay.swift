@@ -15,9 +15,9 @@ struct MapControlsOverlay: View {
     /// 标记点显隐开关；hasWaypoints 控制是否显示该控件。
     var hasWaypoints: Bool = false
     @Binding var showWaypoints: Bool
-    var onPlaceholder: (String) -> Void = { _ in }  // 占位功能点击回调（如未开放的工具）
     var toolsActive: Bool = false                   // 工具箱是否激活（测距/面积/雷达/取点中），高亮按钮
     var onTools: () -> Void = {}                    // 点「工具」回调（打开工具箱）
+    var onPlaceholder: (String) -> Void = { _ in }  // 占位功能点击回调（如未开放的工具）
     var onLayers: () -> Void = {}                   // 点「图层」回调（切底图，由父视图实现）
     var onContours: () -> Void = {}                 // 点「等高线」回调
     var onProfile: () -> Void = {}                  // 点「剖面」回调（展开/收起剖面面板）
