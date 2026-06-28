@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 不做用户追踪（无广告/无跨 App 标识）。 -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!-- 采集数据类型：本地优先应用，轨迹/位置/照片仅存本机、不传出设备，按 Apple 定义不计为"采集"，故为空。
+         注：三期若上线云同步并上传轨迹，需在此补声明 PreciseLocation（用途 AppFunctionality，非追踪）。 -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!-- Required Reason API：声明使用 UserDefaults（@AppStorage 读写本应用自身设置）。 -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!-- CA92.1：仅访问本应用自身的 user defaults 读写信息。 -->
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
