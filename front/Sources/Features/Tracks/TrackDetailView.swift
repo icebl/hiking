@@ -469,15 +469,22 @@ struct TrackDetailView: View {
             if let e = p.elevation { lastEle = e }
             raw.append((acc / 1000, lastEle, loc.coordinate))
         }
+        // 先按 step 下采样到 ~300 点（含末点），再据相邻点算坡度
         let step = max(1, raw.count / 300)
-        var out: [ElevSample] = []
+        var picked: [(d: Double, ele: Double, c: CLLocationCoordinate2D)] = []
         var i = 0
-        while i < raw.count {
-            out.append(ElevSample(id: out.count, d: raw[i].d, ele: raw[i].ele, coord: raw[i].c))
-            i += step
-        }
-        if let last = raw.last, out.last?.d != last.d {
-            out.append(ElevSample(id: out.count, d: last.d, ele: last.ele, coord: last.c))
+        while i < raw.count { picked.append(raw[i]); i += step }
+        if let last = raw.last, picked.last?.d != last.d { picked.append(last) }
+
+        // 坡度 = (本点海拔 - 上一采样海拔) / (两点水平距离 m) × 100；首点与零距离段记 0
+        var out: [ElevSample] = []
+        for (idx, p) in picked.enumerated() {
+            var slope = 0.0
+            if idx > 0 {
+                let dxMeters = (p.d - picked[idx - 1].d) * 1000   // km 差 → m
+                if dxMeters > 0 { slope = (p.ele - picked[idx - 1].ele) / dxMeters * 100 }
+            }
+            out.append(ElevSample(id: idx, d: p.d, ele: p.ele, coord: p.c, slope: slope))
         }
         return out
     }
