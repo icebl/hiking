@@ -61,16 +61,18 @@ final class MapController: ObservableObject {
             edgePadding: UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40), animated: animated)
     }
 
-    /// 放大一级
+    /// 放大一级：先贴整到下一个整数级（滑块后 zoom 多为小数，如 13.8 → 14），整数级则 +1。
     func zoomIn() {
         guard let m = mapView else { return }
-        m.setZoomLevel(m.zoomLevel + 1, animated: true)
+        let target = min(maxZoom, (m.zoomLevel.rounded(.down) + 1))   // floor(z)+1：13.8→14、13.0→14
+        m.setZoomLevel(target, animated: true)
     }
 
-    /// 缩小一级
+    /// 缩小一级：先贴整到上一个整数级（如 13.8 → 13），整数级则 -1。
     func zoomOut() {
         guard let m = mapView else { return }
-        m.setZoomLevel(m.zoomLevel - 1, animated: true)
+        let target = max(minZoom, (m.zoomLevel.rounded(.up) - 1))     // ceil(z)-1：13.8→13、13.0→12
+        m.setZoomLevel(target, animated: true)
     }
 
     /// 滑块：0…1 映射到 [minZoom, maxZoom]

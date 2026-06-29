@@ -115,7 +115,8 @@ struct MapControlsOverlay: View {
         .frame(width: thumb, height: trackH)
         .contentShape(Rectangle())
         .gesture(
-            DragGesture()
+            // minimumDistance:0 —— 去掉默认 10pt 死区，首次滑动从第一像素就跟手，避免触发瞬间跳一下的顿挫
+            DragGesture(minimumDistance: 0)
                 .onChanged { v in
                     zoomDragging = true
                     // 注意：trackH 为 CGFloat，需一并转 Double，否则 Double/CGFloat 混算导致 '-' 重载歧义

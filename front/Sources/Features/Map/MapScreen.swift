@@ -473,7 +473,8 @@ struct MapScreen: View {
         .frame(width: thumb, height: trackH)
         .contentShape(Rectangle())
         .gesture(
-            DragGesture()
+            // minimumDistance:0 —— 去掉默认 10pt 死区，首次滑动从第一像素就跟手，避免触发瞬间跳一下的顿挫
+            DragGesture(minimumDistance: 0)
                 .onChanged { v in
                     zoomDragging = true
                     // 触点 y 反转归一化为 0…1：顶部=1(最大缩放)，底部=0；再驱动地图缩放
