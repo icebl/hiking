@@ -70,6 +70,7 @@ struct TrackDetailView: View {
                         Button { reverseSave() } label: { Label("反向另存", systemImage: "arrow.uturn.left") }
                         Button { splitSegments() } label: { Label("按段拆分", systemImage: "scissors") }
                         Button { showTrim = true } label: { Label("裁剪首尾", systemImage: "crop") }
+                        Button { smoothSave() } label: { Label("平滑去噪另存", systemImage: "wand.and.stars") }
                         Button(role: .destructive) { showDeleteConfirm = true } label: {
                             Label("删除轨迹", systemImage: "trash")
                         }
@@ -513,6 +514,13 @@ struct TrackDetailView: View {
         do {
             let n = try TrackEditor.splitBySegment(trackId)
             showToast(n > 1 ? "已拆为 \(n) 段（在列表查看）" : "只有一段，无法拆分")
+        } catch { showToast("操作失败") }
+    }
+    /// 平滑去噪另存为新轨迹（原轨迹保留；点太少则提示）。
+    private func smoothSave() {
+        do {
+            if try TrackEditor.smoothSave(trackId) != nil { showToast("已另存平滑轨迹（在列表查看）") }
+            else { showToast("点数不足，无法平滑") }
         } catch { showToast("操作失败") }
     }
     /// 切换等高线：未导入等高线包时给出提示而非切换，避免开了开关却看不到东西。

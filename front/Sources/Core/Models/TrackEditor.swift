@@ -68,4 +68,14 @@ enum TrackEditor {
         guard from >= 0, to < pts.count, from < to else { return nil }
         return try save(name: t.name + " 裁剪", points: Array(pts[from...to]), source: t.source)
     }
+
+    /// 平滑去噪另存：对 GPS 抖动/海拔毛刺滤波（见 TrackSmoother）后存为「原名 平滑」，原轨迹保留。
+    /// 统计由 save → ImportService.statistics 在平滑后的点上重算，里程/爬升更贴近真实。
+    @discardableResult
+    static func smoothSave(_ trackId: UUID) throws -> Track? {
+        guard let t = try repo.track(id: trackId) else { return nil }
+        let pts = try repo.points(trackId: trackId)
+        guard pts.count > 2 else { return nil }   // 点太少无意义
+        return try save(name: t.name + " 平滑", points: TrackSmoother.smooth(pts), source: t.source)
+    }
 }
