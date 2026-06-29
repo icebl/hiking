@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// 地图悬浮控件叠加层（轨迹详情地图复用）：
-///   右列：图层(占位) / 工具(占位) / 缩放± / 滑块 / 公里标
-///   左列：回到原点（重新框住轨迹）
+///   右列：图层 / 工具 / 缩放± / 滑块 /（路网）
+///   左列（垂直居中一簇）：定位 / 看全程 /（标记点）/ 等高线 / 公里标 /（剖面）
+///   注：比例尺由 TrackDetailView 单独放在左上（原定位位置），不在本叠加层内。
 struct MapControlsOverlay: View {
     @ObservedObject var controller: MapController   // 复用同一地图控制器，读缩放/定位状态并下发操作
     @State private var zoomDragging = false         // 缩放滑块拖动中（控制左侧数值气泡显隐）
@@ -25,7 +26,7 @@ struct MapControlsOverlay: View {
 
     var body: some View {
         ZStack {
-            // 右列：图层 / 工具 / 缩放 / 公里标 / 路网
+            // 右列：图层 / 工具 / 缩放 /（路网）。公里标已移到左列。
             HStack {
                 Spacer()
                 VStack(spacing: 14) {
@@ -35,7 +36,6 @@ struct MapControlsOverlay: View {
                     zoomGroup
                     zoomSlider
                     Spacer()
-                    ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }
                     if isVectorBase {
                         ctrl("point.topleft.down.curvedto.point.bottomright.up", "路网",
                              active: showRoadNetwork) { showRoadNetwork.toggle() }
@@ -44,17 +44,19 @@ struct MapControlsOverlay: View {
             }
             .padding(.trailing, 14).padding(.vertical, 16)
 
-            // 左列：定位（顶）— 回到原点 / 等高线 / 剖面（中下）
+            // 左列（垂直居中一簇）：定位 / 看全程 /（标记点）/ 等高线 / 公里标 /（剖面）
+            // 定位下移到此簇、紧挨看全程；公里标从右列移来，置于等高线与剖面之间。左上留白给比例尺。
             HStack {
                 VStack(spacing: 14) {
+                    Spacer()
                     ctrl(controller.locateState == .off ? "location" : "location.fill", "定位",
                          active: controller.locateState == .following) { controller.cycleLocate() }
-                    Spacer()
-                    ctrl("scope", "回到原点") { controller.fitTrack() }
+                    ctrl("scope", "看全程") { controller.fitTrack() }   // 缩放到框住整条轨迹
                     if hasWaypoints {
                         ctrl("mappin.and.ellipse", "标记点", active: showWaypoints) { showWaypoints.toggle() }
                     }
                     ctrl("mountain.2", "等高线", active: showContours) { onContours() }
+                    ctrl("ruler", "公里标", active: showKm) { showKm.toggle() }
                     if hasProfile {
                         ctrl("chart.xyaxis.line", "剖面", active: showProfile) { onProfile() }
                     }

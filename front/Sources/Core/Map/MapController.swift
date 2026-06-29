@@ -33,7 +33,7 @@ final class MapController: ObservableObject {
     var minZoom: Double = 1
     var maxZoom: Double = 18
 
-    /// 当前轨迹坐标（由 MapLibreView 回填），用于「回到原点」重新框住。
+    /// 当前轨迹坐标（由 MapLibreView 回填），用于「看全程」重新框住整条轨迹。
     var fitCoords: [CLLocationCoordinate2D] = []
 
     /// 把相机框到给定经纬度范围（如离线影像包覆盖区）。
