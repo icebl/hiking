@@ -766,12 +766,13 @@ final class RadarLabelView: MLNAnnotationView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
-/// 高亮点视图：橙色圆 + 白边。
+/// 高亮点视图（长按「距我距离」/取点/剖面联动共用）：亮紫圆 + 白边。
+/// 用紫色 #7C3AED——避开调色板已占用的绿/红/橙/蓝/青，在卫星图与红色轨迹上都醒目不撞色。
 final class HighlightMarkerView: MLNAnnotationView {
     init() {
         super.init(reuseIdentifier: "highlight")
         frame = CGRect(x: 0, y: 0, width: 18, height: 18)
-        layer.backgroundColor = UIColor(red: 1.0, green: 0.58, blue: 0.0, alpha: 1).cgColor   // 橙
+        layer.backgroundColor = UIColor(red: 0.486, green: 0.227, blue: 0.929, alpha: 1).cgColor   // 亮紫 #7C3AED
         layer.cornerRadius = 9
         layer.borderColor = UIColor.white.cgColor
         layer.borderWidth = 3

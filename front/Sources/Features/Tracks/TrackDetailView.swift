@@ -326,13 +326,10 @@ struct TrackDetailView: View {
                             .padding(.bottom, 24)
                     }
                 }
-                // 指北针（旋转时显示、点击回正北）+ 比例尺标尺，避开左侧控件
+                // 指北针（旋转时显示、点击回正北），避开左侧控件（比例尺并入底部工具箱叠层，见下）
                 CompassButton(controller: mapCtrl)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(.top, 72).padding(.leading, 14)
-                ScaleBarView(controller: mapCtrl)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(.leading, 16).padding(.bottom, 12)
                 // 取点模式提示（未取点时）
                 if pickingCoord && tapped == nil {
                     Text("点击地图取经纬度").font(.caption).foregroundColor(.white)
@@ -340,9 +337,11 @@ struct TrackDetailView: View {
                         .background(AppColor.primary.opacity(0.9)).cornerRadius(10)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).padding(.top, 8)
                 }
-                // 工具箱：测量条 / 取点读数（底部）
+                // 工具箱：比例尺（最上、左对齐）+ 测量条 / 取点读数（底部）
+                // 比例尺并入此叠层：随读数条出现自动上移，避免与测量/取点读数重叠
                 VStack(spacing: 8) {
                     Spacer()
+                    HStack { ScaleBarView(controller: mapCtrl); Spacer() }
                     if measure != .none { measureBar }
                     if tapped != nil { tappedReadout }
                 }.padding(.horizontal, 12).padding(.bottom, 12)

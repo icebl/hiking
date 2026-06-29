@@ -152,9 +152,12 @@ struct MapScreen: View {
                 .padding(.bottom, 96)
             }
 
-            // 底部：测量条（测距/面积时）+ 叠加图例（有叠加时）+ 记录 / 导航
+            // 底部：比例尺 + 测量条（测距/面积时）+ 叠加图例（有叠加时）+ 记录 / 导航
+            // 比例尺并入此叠层最上方、左对齐：随下方读数条出现自动整体上移，避免与「距我距离」读数重叠
             VStack {
                 Spacer()
+                HStack { ScaleBarView(controller: mapCtrl); Spacer() }
+                    .padding(.horizontal, 16).padding(.bottom, 8)
                 if measure != .none { measureBar.padding(.horizontal, 16).padding(.bottom, 8) }
                 if probeText != nil { probeBar.padding(.horizontal, 16).padding(.bottom, 8) }
                 if !overlayItems.isEmpty { overlayLegend.padding(.horizontal, 16).padding(.bottom, 8) }
@@ -171,10 +174,6 @@ struct MapScreen: View {
             CompassButton(controller: mapCtrl)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(.top, 60).padding(.leading, 14)
-            // 比例尺标尺：左下，避开底部按钮
-            ScaleBarView(controller: mapCtrl)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(.leading, 16).padding(.bottom, 104)
         }
         .fullScreenCover(isPresented: $showRecording) { RecordingView() }
         // 进入主地图即前台定位（驱动信息条实时经纬度/海拔）；离开页面停止以省电。
