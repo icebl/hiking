@@ -96,14 +96,21 @@ struct MapControlsOverlay: View {
             if zoomDragging {
                 Text(String(format: "%.1f", controller.zoom))
                     .font(.system(size: 14, weight: .bold)).foregroundColor(AppColor.ink)
+                    .lineLimit(1).fixedSize()   // 强制按理想宽度横排，避免被 28pt 窄列挤成竖排换行
                     .padding(.vertical, 5).padding(.horizontal, 10)
                     .background(Color.white).cornerRadius(9)
                     .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
                     .offset(x: -48, y: y + thumb / 2 - 14)
             }
-            Circle().fill(AppColor.primary).frame(width: thumb, height: thumb)
-                .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
-                .offset(y: y)
+            // 绿点滑块：内部常显当前地图层级数字（拖动时左侧气泡再补一份，防手指遮挡）
+            ZStack {
+                Circle().fill(AppColor.primary).frame(width: thumb, height: thumb)
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                Text(String(format: "%.1f", controller.zoom))
+                    .font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                    .lineLimit(1).fixedSize()
+            }
+            .offset(y: y)
         }
         .frame(width: thumb, height: trackH)
         .contentShape(Rectangle())
