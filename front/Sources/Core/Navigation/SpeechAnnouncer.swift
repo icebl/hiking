@@ -4,7 +4,9 @@ import AVFoundation
 /// 导航语音播报（任务 4.4）：用系统 TTS 念中文提示（偏航/接近航点/到达/剩余里程）。
 /// 播报时把音频会话设为 playback+duckOthers，压低正在播放的音乐；念完恢复，避免长期占用。
 final class SpeechAnnouncer: NSObject, AVSpeechSynthesizerDelegate {
-    private let synth = AVSpeechSynthesizer()
+    // synth 仅在主线程使用；新 SDK 把本类视为 Sendable，AVSpeechSynthesizer 非 Sendable 会报错。
+    // 用 nonisolated(unsafe) 单独豁免该属性的并发检查（语义安全：调用方均在主线程）。
+    nonisolated(unsafe) private let synth = AVSpeechSynthesizer()
     private let voice = AVSpeechSynthesisVoice(language: "zh-CN")   // 中文嗓音（无则系统兜底）
 
     override init() {
