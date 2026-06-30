@@ -11,6 +11,7 @@ struct TrackDetailView: View {
     @State private var points: [TrackPoint] = []     // 轨迹原始点序列（经纬度+海拔），用于建剖面/导出
     @State private var waypoints: [Waypoint] = []    // 航点（标注点）列表
     @State private var coords: [CLLocationCoordinate2D] = []  // points 投影出的坐标，供地图画线
+    @State private var segments: [[CLLocationCoordinate2D]] = []  // 按 segment 分组的坐标，供地图按段断开画线（合并/暂停断段不连直线）
     @State private var exportURL: URL?               // 导出生成的 GPX/KML 临时文件地址
     @State private var showShare = false             // 是否弹出系统分享面板
     @State private var showExportDialog = false      // 是否弹出导出格式选择（GPX/KML）
@@ -93,6 +94,11 @@ struct TrackDetailView: View {
             points = (try? TrackRepository().points(trackId: trackId)) ?? []
             waypoints = (try? TrackRepository().waypoints(trackId: trackId)) ?? []
             coords = points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+            // 按 segment 分组（组内按 seq 排序）→ 段间不连线，避免合并轨迹接不上处的假直线
+            segments = Dictionary(grouping: points, by: { $0.segment })
+                .sorted { $0.key < $1.key }
+                .map { $0.value.sorted { $0.seq < $1.seq }
+                    .map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) } }
             profile = Self.buildProfile(points)
         }
         .alert("重命名轨迹", isPresented: $showRename) {
@@ -303,7 +309,8 @@ struct TrackDetailView: View {
                                      tappedCoord = c
                                      fetchTappedElevation(c)
                                  }
-                             })
+                             },
+                             trackSegments: segments)   // 按段断开画线（追加在末尾）
                 MapControlsOverlay(controller: mapCtrl, showKm: $showKm, showContours: showContours,
                                    hasProfile: !profile.isEmpty, showProfile: showProfile,
                                    isVectorBase: isVectorBase, showRoadNetwork: $showRoadNetwork,

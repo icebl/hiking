@@ -47,14 +47,17 @@ enum TrackEditor {
         return keys.count
     }
 
-    /// 合并多条：按给定顺序首尾相接，每条源轨迹各占一个 segment（避免跨条连线），存为新轨迹。
+    /// 合并多条：按给定顺序首尾相接，每条可选「反接」（点序倒置），每条源轨迹各占一个 segment（段间不连线），存为新轨迹。
+    /// 起点 = 第一条（按其方向）的头，终点 = 最后一条（按其方向）的尾——由用户在合并排序页定好顺序与方向，不再乱标。
+    /// - Parameter items: 有序的 (轨迹 id, 是否反接) 列表；顺序即拼接顺序。
     @discardableResult
-    static func merge(_ trackIds: [UUID]) throws -> Track? {
-        guard trackIds.count >= 2 else { return nil }
+    static func merge(_ items: [(id: UUID, reversed: Bool)]) throws -> Track? {
+        guard items.count >= 2 else { return nil }
         var all: [TrackPoint] = []
-        for (i, id) in trackIds.enumerated() {
-            var pts = try repo.points(trackId: id)
-            for j in pts.indices { pts[j].segment = i }   // 每条源轨迹独立成段
+        for (i, item) in items.enumerated() {
+            var pts = try repo.points(trackId: item.id)
+            if item.reversed { pts.reverse() }            // 反接：点序倒置，使该条的尾变头
+            for j in pts.indices { pts[j].segment = i }   // 每条源轨迹独立成段（段间不连直线）
             all.append(contentsOf: pts)
         }
         return try save(name: "合并轨迹", points: all, source: .imported)

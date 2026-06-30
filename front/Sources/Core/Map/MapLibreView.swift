@@ -58,6 +58,10 @@ struct MapLibreView: UIViewRepresentable {
     var onLongPress: ((CLLocationCoordinate2D) -> Void)? = nil
     /// 点中航点标注回调（返回航点 id，用于编辑收藏点）。提供时点标注不弹名称气泡而走此回调。
     var onWaypointSelect: ((UUID) -> Void)? = nil
+    /// 轨迹分段坐标：每个子数组为一段（segment），段间不连线（合并轨迹/暂停断段用）。
+    /// 非空时轨迹线按段画成 MLNMultiPolyline，避免接不上的两段被强连成直线；空则回退用 trackCoordinates 画单条折线。
+    /// 新参数一律追加到末尾。
+    var trackSegments: [[CLLocationCoordinate2D]] = []
 
     /// 创建 Coordinator（持有可变状态、充当 MLNMapView 的 delegate）。
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -236,16 +240,30 @@ struct MapLibreView: UIViewRepresentable {
             parent.controller?.centerLat = mapView.centerCoordinate.latitude
         }
 
+        /// 轨迹形状：有分段(trackSegments)则按段画成 MLNMultiPolyline（段间不连线，接不上处显示断口）；
+        /// 否则回退为覆盖全部坐标的单条折线（记录中实时线/主地图用）。
+        private func trackShape() -> MLNShape {
+            let segs = parent.trackSegments.filter { $0.count > 1 }
+            if !segs.isEmpty {
+                let polylines = segs.map { seg -> MLNPolyline in
+                    var s = seg
+                    return MLNPolyline(coordinates: &s, count: UInt(s.count))
+                }
+                return MLNMultiPolylineFeature(polylines: polylines)
+            }
+            var pts = coords
+            return MLNPolylineFeature(coordinates: &pts, count: UInt(pts.count))
+        }
+
         /// 绘制/更新轨迹折线 + 起终点圈 + 方向箭头（任务 2.4 / 图7）。
         func drawTrack(on map: MLNMapView) {
             guard coords.count > 1, let style = map.style else { return }
             parent.controller?.fitCoords = coords
-            var pts = coords
-            let polyline = MLNPolylineFeature(coordinates: &pts, count: UInt(pts.count))
+            let shape = trackShape()
             if let src = trackSource {
-                src.shape = polyline
+                src.shape = shape
             } else {
-                let src = MLNShapeSource(identifier: "track", shape: polyline, options: nil)
+                let src = MLNShapeSource(identifier: "track", shape: shape, options: nil)
                 style.addSource(src)
                 let layer = MLNLineStyleLayer(identifier: "track-line", source: src)
                 layer.lineColor = NSExpression(forConstantValue: UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)) // #FF3B30
@@ -285,25 +303,30 @@ struct MapLibreView: UIViewRepresentable {
 
             // 沿轨迹按等弧长(interval 米)采样箭头点：acc 累计已走米数，nextAt 下一个箭头的里程阈值；
             // 在跨越阈值的线段上按比例 t 插值出箭头坐标，并记录该段方位角 b。
+            // 按段独立采样（每段重置 acc/nextAt），避免在接不上的段间断口上画出箭头。
             var feats: [MLNPointFeature] = []
-            var acc = 0.0, nextAt = interval
-            for i in 1..<coords.count {
-                let a = CLLocation(latitude: coords[i-1].latitude, longitude: coords[i-1].longitude)
-                let b = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
-                let seg = b.distance(from: a)
-                guard seg > 0 else { continue }
-                let brng = Self.bearing(from: coords[i-1], to: coords[i])
-                while acc + seg >= nextAt {
-                    let t = (nextAt - acc) / seg
-                    let plat = coords[i-1].latitude + (coords[i].latitude - coords[i-1].latitude) * t
-                    let plon = coords[i-1].longitude + (coords[i].longitude - coords[i-1].longitude) * t
-                    let f = MLNPointFeature()
-                    f.coordinate = CLLocationCoordinate2D(latitude: plat, longitude: plon)
-                    f.attributes = ["b": brng]
-                    feats.append(f)
-                    nextAt += interval
+            let lines = parent.trackSegments.filter { $0.count > 1 }
+            let segGroups: [[CLLocationCoordinate2D]] = lines.isEmpty ? [coords] : lines
+            for line in segGroups {
+                var acc = 0.0, nextAt = interval
+                for i in 1..<line.count {
+                    let a = CLLocation(latitude: line[i-1].latitude, longitude: line[i-1].longitude)
+                    let b = CLLocation(latitude: line[i].latitude, longitude: line[i].longitude)
+                    let seg = b.distance(from: a)
+                    guard seg > 0 else { continue }
+                    let brng = Self.bearing(from: line[i-1], to: line[i])
+                    while acc + seg >= nextAt {
+                        let t = (nextAt - acc) / seg
+                        let plat = line[i-1].latitude + (line[i].latitude - line[i-1].latitude) * t
+                        let plon = line[i-1].longitude + (line[i].longitude - line[i-1].longitude) * t
+                        let f = MLNPointFeature()
+                        f.coordinate = CLLocationCoordinate2D(latitude: plat, longitude: plon)
+                        f.attributes = ["b": brng]
+                        feats.append(f)
+                        nextAt += interval
+                    }
+                    acc += seg
                 }
-                acc += seg
             }
             guard !feats.isEmpty else { return }
             let src = MLNShapeSource(identifier: "track-arrows-src", features: feats, options: nil)

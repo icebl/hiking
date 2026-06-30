@@ -26,6 +26,8 @@ struct TracksView: View {
     @State private var showBatchDelete = false         // 批量删除确认
     @State private var shareURLs: [URL] = []           // 批量导出生成的文件，交系统分享
     @State private var showShare = false               // 是否弹出系统分享面板
+    @State private var showMergeOrder = false          // 合并排序页（排顺序+定方向）
+    @State private var mergeCandidates: [Track] = []   // 待合并的轨迹（按列表选择顺序）
     @State private var toast: String?                  // 轻提示（如未选轨迹），短暂显示
 
     private let repo = TrackRepository()      // 数据访问层：轨迹/文件夹的增删改查
@@ -77,6 +79,12 @@ struct TracksView: View {
         } message: { Text("删除后可在云端同步前恢复（三期）；本机列表将移除。") }
         // 批量导出后的系统分享面板
         .sheet(isPresented: $showShare) { ShareSheet(items: shareURLs) }
+        // 合并排序页：排顺序+定方向，确认后合并为新轨迹（MergeOrderView 内部自行关闭）
+        .sheet(isPresented: $showMergeOrder) {
+            MergeOrderView(tracks: mergeCandidates) { ok in
+                if ok { selectedIDs = []; reload(); showToast("已合并为新轨迹") }
+            }
+        }
     }
 
     // MARK: - 顶部
@@ -257,14 +265,11 @@ struct TracksView: View {
         .overlay(Divider(), alignment: .top)
     }
 
-    /// 合并选中轨迹（≥2 条）为一条新轨迹；按列表顺序首尾相接，原轨迹保留。
+    /// 合并选中轨迹（≥2 条）：弹合并排序页，让用户排顺序+定每条方向，再合并为新轨迹（原轨迹保留）。
     private func mergeSelected() {
         guard selectedIDs.count >= 2 else { showToast("至少选 2 条轨迹合并"); return }
-        let ordered = shown.filter { selectedIDs.contains($0.id) }.map { $0.id }   // 按列表顺序，结果稳定
-        do {
-            if try TrackEditor.merge(ordered) != nil { selectedIDs = []; reload(); showToast("已合并为新轨迹") }
-            else { showToast("合并失败") }
-        } catch { showToast("合并失败") }
+        mergeCandidates = shown.filter { selectedIDs.contains($0.id) }   // 按列表顺序作为初始拼接序
+        showMergeOrder = true
     }
 
     /// 有选中才执行操作，否则提示先选择（统一三个批量按钮的空选行为）。
