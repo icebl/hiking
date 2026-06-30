@@ -9,7 +9,7 @@ struct MergeOrderView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [Row]
-    @State private var error: String?
+    @State private var errorMsg: String?   // 注意：不能命名 error，会被 catch 隐式绑定的 error 遮蔽
 
     /// 一行：轨迹 id + 名称 + 是否反接（尾→头）。
     struct Row: Identifiable { let id: UUID; let name: String; var reversed: Bool }
@@ -44,9 +44,9 @@ struct MergeOrderView: View {
             }
             .navigationTitle("合并轨迹").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarLeading) { Button("取消") { dismiss() } } }
-            .alert("无法合并", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            .alert("无法合并", isPresented: Binding(get: { errorMsg != nil }, set: { if !$0 { errorMsg = nil } })) {
                 Button("好", role: .cancel) {}
-            } message: { Text(error ?? "") }
+            } message: { Text(errorMsg ?? "") }
         }
     }
 
@@ -95,7 +95,7 @@ struct MergeOrderView: View {
         do {
             let ordered = rows.map { (id: $0.id, reversed: $0.reversed) }
             if try TrackEditor.merge(ordered) != nil { onDone(true); dismiss() }
-            else { error = "至少需要 2 条轨迹，且每条都有足够的点。" }
-        } catch { error = "合并失败，请重试。" }
+            else { errorMsg = "至少需要 2 条轨迹，且每条都有足够的点。" }
+        } catch { errorMsg = "合并失败，请重试。" }
     }
 }
