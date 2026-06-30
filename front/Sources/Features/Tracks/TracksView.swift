@@ -361,7 +361,7 @@ struct TracksView: View {
     private func createFolder() {
         let name = newFolderName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
-        try? repo.createFolder(name: name); reload()
+        _ = try? repo.createFolder(name: name); reload()   // 显式丢弃结果（try? 包出的 Folder? 不受 @discardableResult 覆盖）
     }
 
     private static let df: DateFormatter = {
