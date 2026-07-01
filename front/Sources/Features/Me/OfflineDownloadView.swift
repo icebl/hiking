@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import UIKit   // isIdleTimerDisabled：下载时防自动熄屏
 
 /// 框选区域下载离线影像（任务 2.7 / S2-B，官方 MLNOfflineStorage）：
 /// 移动地图把目标装进中央取景框 → 选级别 → 预估 → 下载并缓存 ESRI 卫星瓦片。
@@ -49,6 +50,12 @@ struct OfflineDownloadView: View {
                 }
             }
 
+            // 比例尺：左上角（topBar 下方、绿框上方），随缩放实时更新
+            ScaleBarView(controller: mapCtrl)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, 60).padding(.leading, 16)
+                .allowsHitTesting(false)
+
             VStack(spacing: 0) {
                 topBar
                 Spacer()
@@ -60,6 +67,12 @@ struct OfflineDownloadView: View {
         .onAppear {
             if locatedCoords.isEmpty, !initialCoords.isEmpty { locatedCoords = initialCoords }  // 详情页带入的轨迹
         }
+        // 下载中禁用自动熄屏（App 保持前台→MapLibre 下载不被挂起）；非下载态恢复
+        .onChange(of: pdl.phase) { newPhase in
+            UIApplication.shared.isIdleTimerDisabled = (newPhase == .downloading)
+        }
+        // 离开页面兜底恢复，避免把常亮状态带出本页
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         // 「选轨迹」定位面板：选一条 → 画线并框住
         .sheet(isPresented: $showTrackPicker) { trackPicker }
     }
@@ -128,6 +141,8 @@ struct OfflineDownloadView: View {
             case .downloading:
                 ProgressView(value: Double(pdl.completed), total: Double(max(1, pdl.expected)))
                 Text("已缓存 \(pdl.completed)/\(pdl.expected)").font(.caption).foregroundColor(AppColor.ink2)
+                Text("下载期间屏幕保持常亮，请停留本页、勿手动锁屏或切到后台")
+                    .font(.caption2).foregroundColor(AppColor.warning)
                 Button { pdl.cancel() } label: { btn("取消下载", AppColor.recording) }
             case .finished:
                 Text("✅ 已缓存完成（\(pdl.completed) 项）。断网进到该区域，底图自动显示。")
