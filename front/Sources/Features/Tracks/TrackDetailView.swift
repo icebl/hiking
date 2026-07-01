@@ -40,6 +40,7 @@ struct TrackDetailView: View {
     @State private var showKindDialog = false           // 是否弹出类型选择面板
     @State private var viewerImage: UIImage?            // 正在全屏查看的航点照片（nil=不显示）
     @State private var showTrim = false                 // 裁剪首尾页
+    @State private var showAreaDownload = false          // 下载此区域离线影像（带本轨迹范围进下载页）
     @AppStorage("highContrastMap") private var highContrast = false  // 高对比地图文字
 
     // 工具箱（同地图页）：取点 / 测距 / 面积 / 距离雷达
@@ -72,6 +73,7 @@ struct TrackDetailView: View {
                         Button { splitSegments() } label: { Label("按段拆分", systemImage: "scissors") }
                         Button { showTrim = true } label: { Label("裁剪首尾", systemImage: "crop") }
                         Button { smoothSave() } label: { Label("平滑去噪另存", systemImage: "wand.and.stars") }
+                        Button { showAreaDownload = true } label: { Label("下载此区域离线影像", systemImage: "arrow.down.circle") }
                         Button(role: .destructive) { showDeleteConfirm = true } label: {
                             Label("删除轨迹", systemImage: "trash")
                         }
@@ -115,6 +117,10 @@ struct TrackDetailView: View {
         }
         .sheet(isPresented: $showTrim) {
             NavigationStack { TrackTrimView(trackId: trackId) { showToast("已保存裁剪轨迹（在列表查看）") } }
+        }
+        // 下载此区域离线影像：带本轨迹坐标进下载页，自动框住该轨迹范围
+        .fullScreenCover(isPresented: $showAreaDownload) {
+            OfflineDownloadView(initialCoords: coords)
         }
         .confirmationDialog("导出格式", isPresented: $showExportDialog, titleVisibility: .visible) {
             Button("GPX") { export(.gpx) }
