@@ -10,25 +10,38 @@ struct OfflineDownloadView: View {
     @StateObject private var pdl = OfflinePackDownloader()      // 下载器：发布 phase/进度供面板观察
     @State private var maxZoom = 16                            // 下载最高瓦片级别（12…16），越高越清晰也越大
     @State private var mapSize: CGSize = .zero                 // 地图视图尺寸，用于把绿框换算成地理范围
+    @State private var box: CGRect = .zero                     // 选择框（屏幕坐标，点）；可拖四角自定义大小
 
-    // 中央取景框相对屏幕的内边距（点）：左右各 marginX，上下分别留 frameTop/frameBottom
+    // 初始取景框相对屏幕的内边距（点）：左右各 marginX，上下分别留 frameTop/frameBottom
     private let marginX: CGFloat = 22
     private let frameTop: CGFloat = 100
     private let frameBottom: CGFloat = 300
+
+    /// 选择框的上/下边，用于生成可拖拽手柄（仅调高度，宽度固定为全宽）。
+    private enum Edge: CaseIterable { case top, bottom }
 
     var body: some View {
         ZStack {
             MapLibreView(controller: mapCtrl).ignoresSafeArea()
 
             GeometryReader { geo in
-                let r = frameRect(geo.size)
-                Rectangle()
-                    .strokeBorder(AppColor.primary, lineWidth: 2)
-                    .frame(width: r.width, height: r.height)
-                    .position(x: r.midX, y: r.midY)
-                    .onAppear { mapSize = geo.size }
+                ZStack {
+                    // 选择框：描边矩形本身不拦截手势（地图仍可平移/缩放定位）
+                    Rectangle()
+                        .strokeBorder(AppColor.primary, lineWidth: 2)
+                        .frame(width: box.width, height: box.height)
+                        .position(x: box.midX, y: box.midY)
+                        .allowsHitTesting(false)
+                    // 上/下边中点各一个拖拽手柄：仅调高度（宽度固定）
+                    ForEach(Edge.allCases, id: \.self) { edge in
+                        edgeHandle(edge, in: geo.size)
+                    }
+                }
+                .onAppear {
+                    mapSize = geo.size
+                    if box == .zero { box = frameRect(geo.size) }   // 初始默认框
+                }
             }
-            .allowsHitTesting(false)
 
             VStack(spacing: 0) {
                 topBar
@@ -69,7 +82,7 @@ struct OfflineDownloadView: View {
                     Text("⚠ 范围/级别过大，建议缩小取景或降低级别").font(.caption).foregroundColor(AppColor.warning)
                 }
             } else {
-                Text("移动/缩放地图，把目标区域装进绿框").font(.subheadline).foregroundColor(AppColor.ink2)
+                Text("移动/缩放地图定位，拖上/下边调整绿框高度").font(.subheadline).foregroundColor(AppColor.ink2)
             }
 
             // 按下载阶段呈现不同 UI：下载中(进度+取消) / 完成 / 失败(重试) / 空闲(开始)
@@ -97,8 +110,33 @@ struct OfflineDownloadView: View {
             .frame(maxWidth: .infinity).frame(height: 50).background(c).cornerRadius(AppRadius.button)
     }
 
+    // MARK: - 选择框拖拽（仅调高度）
+    /// 上/下边中点的拖拽手柄（横向药丸），拖动仅改对应边的 Y（高度），宽度不变。
+    private func edgeHandle(_ edge: Edge, in size: CGSize) -> some View {
+        let y = (edge == .top) ? box.minY : box.maxY
+        return RoundedRectangle(cornerRadius: 5)
+            .fill(Color.white)
+            .frame(width: 46, height: 14)
+            .overlay(RoundedRectangle(cornerRadius: 5).stroke(AppColor.primary, lineWidth: 2))
+            .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            .position(x: box.midX, y: y)
+            .gesture(DragGesture(minimumDistance: 0).onChanged { v in resizeHeight(edge, to: v.location.y, in: size) })
+    }
+
+    /// 拖动上/下边调整高度：对应边跟随手指 Y、另一边固定；限制最小高度并夹在地图区域内。
+    private func resizeHeight(_ edge: Edge, to yRaw: CGFloat, in size: CGSize) {
+        let minH: CGFloat = 80
+        let y = max(0, min(yRaw, size.height))
+        var top = box.minY, bottom = box.maxY
+        switch edge {
+        case .top:    top = min(y, bottom - minH)
+        case .bottom: bottom = max(y, top + minH)
+        }
+        box = CGRect(x: box.minX, y: top, width: box.width, height: bottom - top)
+    }
+
     // MARK: - 计算
-    /// 按内边距常量算出取景框在给定尺寸下的矩形（屏幕坐标，单位：点）。
+    /// 按内边距常量算出取景框在给定尺寸下的矩形（屏幕坐标，单位：点）。用于选择框的初始大小。
     private func frameRect(_ size: CGSize) -> CGRect {
         CGRect(x: marginX, y: frameTop,
                width: max(0, size.width - 2 * marginX),
@@ -107,12 +145,12 @@ struct OfflineDownloadView: View {
 
     /// 把屏幕上的绿框换算成地理瓦片区域；下载中或尺寸未知时返回 nil（禁用下载）。
     private func region() -> TileRegion? {
-        guard let map = mapCtrl.mapView, mapSize != .zero, pdl.phase != .downloading else { return nil }
+        guard let map = mapCtrl.mapView, mapSize != .zero,
+              box.width > 0, box.height > 0, pdl.phase != .downloading else { return nil }
         _ = mapCtrl.zoom    // 依赖 published zoom，地图移动/缩放后重算
-        let r = frameRect(mapSize)
-        // 框的左上/右下两屏幕点反投影为经纬度，作为区域对角
-        let nw = map.convert(CGPoint(x: r.minX, y: r.minY), toCoordinateFrom: map)
-        let se = map.convert(CGPoint(x: r.maxX, y: r.maxY), toCoordinateFrom: map)
+        // 用户自定义的选择框（屏幕坐标）：左上/右下两屏幕点反投影为经纬度，作为区域对角
+        let nw = map.convert(CGPoint(x: box.minX, y: box.minY), toCoordinateFrom: map)
+        let se = map.convert(CGPoint(x: box.maxX, y: box.maxY), toCoordinateFrom: map)
         guard nw.latitude != se.latitude else { return nil }   // 退化（无高度）则视为无效
         // 用 min/max 规整成标准 bbox，固定从 z10 下到所选 maxZoom
         return TileRegion(minLon: min(nw.longitude, se.longitude), minLat: min(nw.latitude, se.latitude),
